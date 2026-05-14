@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- W 모양 기본 획 -->
-  <polyline points="80,100 180,400 256,220 332,400 432,100"
-    fill="none" stroke="#666" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
-  <!-- 가로선 2개 -->
-  <line x1="120" y1="230" x2="392" y2="230" stroke="#666" stroke-width="28" stroke-linecap="round"/>
-  <line x1="140" y1="300" x2="372" y2="300" stroke="#666" stroke-width="28" stroke-linecap="round"/>
-</svg>
