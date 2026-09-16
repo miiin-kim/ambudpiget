@@ -711,8 +711,30 @@ function thisMonthSavingsForBudget(){
   const d=bd[k];return d?(d.saving||[]):[];
 }
 
-const BANK_COLORS={'국민':{bg:'#FFEFC2',text:'#8B6800',bar:'#F0A500'},'KB':{bg:'#FFEFC2',text:'#8B6800',bar:'#F0A500'},'신한':{bg:'#D6E8FF',text:'#0046B0',bar:'#0068D6'},'우리':{bg:'#D4F0E8',text:'#006847',bar:'#00A86B'},'하나':{bg:'#D6F0E4',text:'#005C3A',bar:'#009B6D'},'농협':{bg:'#E2F4D4',text:'#3A6B00',bar:'#5A9E00'},'NH':{bg:'#E2F4D4',text:'#3A6B00',bar:'#5A9E00'},'기업':{bg:'#CFE4FF',text:'#003F9B',bar:'#1358C8'},'IBK':{bg:'#CFE4FF',text:'#003F9B',bar:'#1358C8'},'토스':{bg:'#E0EEFF',text:'#1353C8',bar:'#3370E8'},'카카오':{bg:'#FFF5C2',text:'#7A5A00',bar:'#F7C300'},'케이뱅크':{bg:'#E0F0FF',text:'#005FAA',bar:'#007FDD'},'케이':{bg:'#E0F0FF',text:'#005FAA',bar:'#007FDD'},'새마을':{bg:'#FFE5D4',text:'#883000',bar:'#D4500A'},'신협':{bg:'#FDECD4',text:'#8B4500',bar:'#D46000'},'우체국':{bg:'#FFF0D4',text:'#8B5000',bar:'#E07800'},'SC':{bg:'#D4FFE8',text:'#005C30',bar:'#00904C'},'씨티':{bg:'#D4E4FF',text:'#001E8C',bar:'#1040CC'},'산업':{bg:'#E4E4FF',text:'#2A2A9B',bar:'#4040CC'}};
-const FB=[{bg:'#EDE0FF',text:'#5A20CC',bar:'#7840E8'},{bg:'#FFE0F0',text:'#8C1060',bar:'#CC2080'},{bg:'#E0FFF4',text:'#006648',bar:'#00996A'},{bg:'#FFF0E0',text:'#8C4800',bar:'#CC7000'}];
+  const BANK_COLORS={'국민':{bg:'#FFF0DC', text:'#A85A00', bar:'#F28C28'},
+                     'KB':{bg:'#FFF0DC', text:'#A85A00', bar:'#F28C28'},  
+                     '카카오뱅크':{ bg:'#FFF7CC', text:'#806500', bar:'#FFD43B'},
+                     '카카오':{bg:'#FFF7CC', text:'#806500', bar:'#FFD43B'},
+                     '신한':{bg:'#E3EEFF', text:'#1455A0', bar:'#3478C9'},  
+                     '우리':{bg:'#E0F3E8', text:'#176B45', bar:'#3AA76D'},
+                     '삼성증권':{bg:'#E5F6FF', text:'#147AA8', bar:'#55BCE8'},
+                     '한국투자':{bg:'#E5EAF4', text:'#173A67', bar:'#244E7C'},
+  
+                     '하나':{bg:'#D6F0E4',text:'#005C3A',bar:'#009B6D'},
+                     '농협':{bg:'#E2F4D4',text:'#3A6B00',bar:'#5A9E00'},
+                     'NH':{bg:'#E2F4D4',text:'#3A6B00',bar:'#5A9E00'},
+                     '기업':{bg:'#CFE4FF',text:'#003F9B',bar:'#1358C8'},
+                     'IBK':{bg:'#CFE4FF',text:'#003F9B',bar:'#1358C8'},
+                     '토스':{bg:'#E0EEFF',text:'#1353C8',bar:'#3370E8'},
+                     '케이뱅크':{bg:'#E0F0FF',text:'#005FAA',bar:'#007FDD'},
+                     '새마을':{bg:'#FFE5D4',text:'#883000',bar:'#D4500A'},
+                     '신협':{bg:'#FDECD4',text:'#8B4500',bar:'#D46000'},
+                     '우체국':{bg:'#FFF0D4',text:'#8B5000',bar:'#E07800'},
+                     'SC':{bg:'#D4FFE8',text:'#005C30',bar:'#00904C'},
+                     '씨티':{bg:'#D4E4FF',text:'#001E8C',bar:'#1040CC'},
+                     '산업':{bg:'#E4E4FF',text:'#2A2A9B',bar:'#4040CC'}
+                    };
+  const FB=[{bg:'#EDE0FF',text:'#5A20CC',bar:'#7840E8'},{bg:'#FFE0F0',text:'#8C1060',bar:'#CC2080'},{bg:'#E0FFF4',text:'#006648',bar:'#00996A'},{bg:'#FFF0E0',text:'#8C4800',bar:'#CC7000'}];
 function getBankColor(name,i){for(const k of Object.keys(BANK_COLORS))if((name||'').includes(k))return BANK_COLORS[k];return FB[i%FB.length]}
 
 function monthsBetween(s,e){const a=new Date(s),b=new Date(e);return Math.max(0,(b.getFullYear()-a.getFullYear())*12+(b.getMonth()-a.getMonth()))}
