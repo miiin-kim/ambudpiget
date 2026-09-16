@@ -767,13 +767,33 @@ function calcMaturity(acc){
 function nextAutoDate(d){const t=new Date(),th=new Date(t.getFullYear(),t.getMonth(),d);return t<=th?th:new Date(t.getFullYear(),t.getMonth()+1,d)}
 
 function updateSummary(){
-  const accs=getAccounts();let paid=0,mat=0;accs.forEach(a=>{paid+=calcPaid(a);mat+=calcMaturity(a);});
-  document.getElementById('total-paid').textContent=fmt(paid);
+  const accs=getAccounts();
+
+  let paidAll=0, mat=0;
+
+  accs.forEach(a=>{
+    paidAll+=calcPaid(a);
+    mat+=calcMaturity(a);
+  });
+
+  // '나' 탭에서는 주택청약 계좌를 전체 납입액에서 제외
+  const isMe=activeMemberId('savings')==='me';
+
+  const paidForDisplay=isMe
+    ? accs
+        .filter(a=>!(a.name||'').includes('주택청약'))
+        .reduce((sum,a)=>sum+calcPaid(a),0)
+    : paidAll;
+
+  document.getElementById('total-paid').textContent=fmt(paidForDisplay);
   document.getElementById('total-maturity-sub').textContent='만기 예상 수령액: '+fmt(mat);
   document.getElementById('stat-count').textContent=accs.length;
-  document.getElementById('stat-avg-rate').textContent=accs.length?pct(accs.reduce((s,a)=>s+a.rate,0)/accs.length):'—';
-  document.getElementById('stat-interest').textContent=fmt(Math.max(0,mat-paid));
+  document.getElementById('stat-avg-rate').textContent=
+    accs.length?pct(accs.reduce((s,a)=>s+a.rate,0)/accs.length):'—';
+  document.getElementById('stat-interest').textContent=
+    fmt(Math.max(0,mat-paidAll));
 }
+
 function renderSavings(){
   updateSummary();renderThisMonthBar();
   const accs=getAccounts(),el=document.getElementById('cards-list');
