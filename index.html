@@ -111,6 +111,10 @@ body{font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:var(--bg)
 .btn-sm:active{background:var(--surface2)}
 .btn-sm.danger{color:var(--red)}
 .auto-dot{width:5px;height:5px;border-radius:50%;display:inline-block;margin-right:3px;vertical-align:middle}
+.savings-drag-handle{color:var(--text3);font-size:18px;cursor:grab;flex-shrink:0;padding:8px 2px;line-height:1;touch-action:none;user-select:none;}
+.savings-drag-handle:active{cursor:grabbing;}
+.card.dragging{opacity:.35;}
+.card.drag-over{border-top:3px solid var(--blue);}
 
 /* ── THIS MONTH BAR ── */
 .link-badge{display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:600;padding:2px 7px;border-radius:99px;background:var(--purple-bg);color:var(--purple);margin-left:6px;vertical-align:middle}
@@ -670,7 +674,9 @@ function renderThisMonthBar(){
   let html=items.map(item=>{
     total+=item.amount||0;
     const accs=getAccounts();const acc=lm[item.name]?accs.find(a=>a.id===lm[item.name]):null;
-    const badge=acc?`<span class="link-badge">🔗 ${acc.bank}</span>`:`<span class="link-badge" style="background:#f0f0f0;color:var(--text3);cursor:pointer" onclick="openLinkModal('${item.name.replace(/'/g,"\\'")}')">연결 설정</span>`;
+    const badge=acc
+      ? `<span class="link-badge" style="cursor:pointer" onclick="openLinkModal('${item.name.replace(/'/g,"\\'")}')">🔗 ${acc.bank}</span>`
+      : `<span class="link-badge" style="background:#f0f0f0;color:var(--text3);cursor:pointer" onclick="openLinkModal('${item.name.replace(/'/g,"\\'")}')">연결 설정</span>`;
     return `<div class="tmb-row"><div><span class="tmb-name">${item.name}</span>${badge}</div><span class="tmb-amount">${item.amount?fmt(item.amount):'미입력'}</span></div>`;
   }).join('');
   html+=`<div class="tmb-total-row"><span class="tmb-total-lbl">이번 달 저축 합계</span><span class="tmb-total-val">${fmt(total)}</span></div>`;
@@ -791,6 +797,9 @@ function renderSavings(){
     const matLabel=acc.end?'만기 예상액':'현재 잔액';
     return `<div class="card" id="card-${acc.id}">
       <div class="card-header" onclick="toggleCard(${acc.id})">
+        <div class="savings-drag-handle"
+             data-savings-drag
+             onclick="event.stopPropagation()">≡</div>
         <div class="bank-icon" style="background:${c.bg};color:${c.text}">${acc.bank.slice(0,2)}</div>
         <div class="card-header-info">
           <div class="bank-name">${acc.name}${badge}</div>
@@ -823,8 +832,125 @@ function renderSavings(){
       </div>
     </div>`;
   }).join('');
+
+  initSavingsDrag(el);
 }
 function toggleCard(id){const el=document.getElementById('card-'+id);if(el)el.classList.toggle('open')}
+
+function initSavingsDrag(container){
+  if(!container)return;
+  if(container.dataset.dragInit==='1')return;
+  container.dataset.dragInit='1';
+  
+  function getCards(){
+    return [...container.querySelectorAll('.card')];
+  }
+  
+  container.addEventListener('mousedown',startDrag);
+  container.addEventListener('touchstart',startDrag,{passive:false});
+  
+  function startDrag(e){
+    const handle=e.target.closest('[data-savings-drag]');
+    if(!handle)return;
+  
+    e.preventDefault();
+    e.stopPropagation();
+  
+    const dragged=handle.closest('.card');
+    if(!dragged)return;
+  
+    const cards=getCards();
+    const fromIdx=cards.indexOf(dragged);
+  
+    dragged.classList.add('dragging');
+  
+    const rect=dragged.getBoundingClientRect();
+    const ghost=dragged.cloneNode(true);
+  
+    ghost.style.cssText=`
+      position:fixed;
+      left:${rect.left}px;
+      top:${rect.top}px;
+      width:${rect.width}px;
+      opacity:.9;
+      pointer-events:none;
+      z-index:999;
+      box-shadow:0 8px 24px rgba(0,0,0,.18);
+      background:white;
+    `;
+  
+    document.body.appendChild(ghost);
+  
+    const startY=e.touches
+      ? e.touches[0].clientY
+      : e.clientY;
+  
+    const startTop=rect.top;
+  
+    let over=null;
+  
+    function move(e){
+      if(e.cancelable)e.preventDefault();
+  
+      const currentY=e.touches
+        ? e.touches[0].clientY
+        : e.clientY;
+  
+      ghost.style.top=(startTop+currentY-startY)+'px';
+  
+      const others=getCards().filter(card=>card!==dragged);
+      let found=null;
+  
+      for(const card of others){
+        const r=card.getBoundingClientRect();
+  
+        if(currentY>=r.top && currentY<=r.bottom){
+          found=card;
+          break;
+        }
+      }
+  
+      if(found!==over){
+        if(over)over.classList.remove('drag-over');
+  
+        over=found;
+  
+        if(over)over.classList.add('drag-over');
+      }
+    }
+  
+    function end(){
+      ghost.remove();
+      dragged.classList.remove('dragging');
+  
+      if(over)over.classList.remove('drag-over');
+  
+      document.removeEventListener('mousemove',move);
+      document.removeEventListener('mouseup',end);
+      document.removeEventListener('touchmove',move);
+      document.removeEventListener('touchend',end);  
+  
+      if(!over)return;
+  
+      const currentCards=getCards();
+      const toIdx=currentCards.indexOf(over);
+  
+      if(fromIdx===toIdx)return;
+  
+      const accs=getAccounts();
+      const [moved]=accs.splice(fromIdx,1);
+      accs.splice(toIdx,0,moved);
+  
+      sSave();
+      renderSavings();
+    }
+  
+    document.addEventListener('mousemove',move);
+    document.addEventListener('mouseup',end);
+    document.addEventListener('touchmove',move,{passive:false});
+    document.addEventListener('touchend',end);
+  }
+}
 
 function updateInterestLabel(){
   ['simple','compound'].forEach(v=>{
@@ -874,9 +1000,32 @@ function saveAccount(){
   sSave();closeAddModal();renderSavings();
 }
 function deleteAcc(id){
-  const acc=getAccounts().find(a=>a.id===Number(id));if(!acc)return;
-  document.getElementById('confirm-msg').textContent=acc.bank+' '+acc.name+' 계좌를 삭제할까요?';
-  document.getElementById('confirm-yes-btn').onclick=function(){accounts[sKey()]=getAccounts().filter(a=>a.id!==Number(id));sSave();closeConfirm();renderSavings();};
+  const targetId=Number(id);
+  const acc=getAccounts().find(a=>a.id===targetId);
+  if(!acc)return;
+
+  document.getElementById('confirm-msg').textContent=
+    acc.bank+' '+acc.name+' 계좌를 삭제할까요?';
+
+  document.getElementById('confirm-yes-btn').onclick=function(){
+
+    // 이 계좌와 연결된 가계부 항목 연결 해제
+    const lm=getLinks();
+    Object.keys(lm).forEach(name=>{
+      if(Number(lm[name])===targetId){
+        delete lm[name];
+      }
+    });
+    saveLinks();
+
+    // 적금 계좌 삭제
+    accounts[sKey()]=getAccounts().filter(a=>a.id!==targetId);
+    sSave();
+
+    closeConfirm();
+    renderSavings();
+  };
+
   document.getElementById('confirm-modal').classList.add('open');
 }
 function closeConfirm(){document.getElementById('confirm-modal').classList.remove('open')}
