@@ -1097,7 +1097,34 @@ function onAmountBlur(el){
   document.getElementById('net-bar').style.width=(ti>0?Math.min(100,Math.round((ti-net)/ti*100)):0)+'%';
   if(typeof renderThisMonthBar==='function')renderThisMonthBar();
 }
-function onAmountInput(el){const raw=el.value.replace(/[^0-9]/g,'');el.value=raw?Number(raw).toLocaleString('ko-KR'):''}
+function onAmountInput(el){
+  const digits=el.value.replace(/[^0-9]/g,'');
+  const raw=digits?Number(digits):0;
+
+  // 입력창 표시
+  el.value=digits?raw.toLocaleString('ko-KR'):'';
+  el.classList.toggle('empty',!raw);
+
+  // 실제 가계부 데이터도 즉시 변경
+  const sec=el.dataset.section;
+  const idx=parseInt(el.dataset.index);
+  const sub=el.dataset.subcat||'';
+  const d=getMonthData(budgetYear,budgetMonth);
+
+  if(sec==='expense'){
+    if(sub==='fixed') d.expense.fixed[idx].amount=raw;
+    else d.expense.flex[idx].amount=raw;
+  }
+  else if(sec==='income'){
+    d.income[idx].amount=raw;
+  }
+  else if(sec==='saving'){
+    d.saving[idx].amount=raw;
+  }
+
+  // 저장 + 적금관리 즉시 반영
+  bSave();
+}
 
 function makeRow(row,i,sec,sub){const disp=toComma(row.amount||0);return `<div class="budget-row" data-section="${sec}" data-index="${i}" data-subcat="${sub}"><span class="drag-handle" data-drag="true">☰</span><div class="budget-row-label">${row.name}</div><input class="budget-amount${row.amount?'':' empty'}" type="text" inputmode="numeric" value="${disp}" placeholder="0" data-section="${sec}" data-index="${i}" data-subcat="${sub}" onfocus="onAmountFocus(this)" onblur="onAmountBlur(this)" oninput="onAmountInput(this)"/><button class="del-row-btn" onclick="deleteRow('${sec}',${i},'${sub}')">×</button></div>`}
 
