@@ -914,6 +914,31 @@ function calcMaturity(acc){
     + monthly*remaining*(1+r*(remaining+1)/2)
   );
 }
+function nextAutoDate(d){
+  const now=new Date();
+
+  const today=new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate()
+  );
+
+  const thisMonthDate=new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    d
+  );
+
+  if(today<=thisMonthDate){
+    return thisMonthDate;
+  }
+
+  return new Date(
+    now.getFullYear(),
+    now.getMonth()+1,
+    d
+  );
+}
 function updateSummary(){
   const accs=getAccounts();
 
