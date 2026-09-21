@@ -746,16 +746,52 @@ function getBankColor(name,i){for(const k of Object.keys(BANK_COLORS))if((name||
 
 function monthsBetween(s,e){const a=new Date(s),b=new Date(e);return Math.max(0,(b.getFullYear()-a.getFullYear())*12+(b.getMonth()-a.getMonth()))}
 function calcPaidCount(acc){
-  const total=monthsBetween(acc.start,acc.end),today=new Date(),base=new Date(acc.registeredAt||acc.start);
-  let cnt=0,y=base.getFullYear(),m=base.getMonth();
-  if(new Date(y,m,acc.autoday)<base){m++;if(m>11){m=0;y++;}}
-  while(true){if(new Date(y,m,acc.autoday)>today)break;cnt++;m++;if(m>11){m=0;y++;}if(cnt>=total)break;}
+  if(!acc.monthly || !acc.autoday) return 0;
+
+  const today=new Date();
+  const base=new Date(acc.registeredAt||acc.start);
+
+  let y=base.getFullYear();
+  let m=base.getMonth();
+  let cnt=0;
+
+  // 등록 시점 이후 첫 자동이체일 찾기
+  if(new Date(y,m,acc.autoday)<base){
+    m++;
+    if(m>11){
+      m=0;
+      y++;
+    }
+  }
+
+  while(true){
+    const payDate=new Date(y,m,acc.autoday);
+
+    if(payDate>today) break;
+
+    // 만기일이 있는 상품만 만기 이후 계산 중단
+    if(acc.end && payDate>new Date(acc.end)) break;
+
+    cnt++;
+
+    m++;
+    if(m>11){
+      m=0;
+      y++;
+    }
+  }
+
   return cnt;
 }
 function calcPaid(acc){
-  const base=(acc.initBalance||0)+(acc.monthly||0)*calcPaidCount(acc)+(acc.extra||0);
+  const base=
+    (acc.initBalance||0)
+    +(acc.monthly||0)*calcPaidCount(acc)
+    +(acc.extra||0);
+  
   const budgetAmt=getBudgetAmountForAccount(acc.id);
-  return base+budgetAmt;
+
+  return base + ((acc.monthly||0)>0 ? 0 : budgetAmt);
 }
 function calcMaturity(acc){
   if(!acc.end) return calcPaid(acc); // 만기일 없으면 현재 납입액만
