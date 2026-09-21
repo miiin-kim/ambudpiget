@@ -1264,9 +1264,15 @@ function syncAutoSavingsToBudget(memberName){
     if(dueDate>now) return;
 
     // 웹페이지에 계좌를 등록하기 전의 자동이체는 자동생성하지 않음
-    const base=new Date(acc.registeredAt||acc.start);
-
-    if(!Number.isNaN(base.getTime()) && dueDate<base){
+    const baseStr=acc.registeredAt||acc.start;
+    let base=null;
+    
+    if(baseStr){
+      const [by,bm,bd]=baseStr.split('-').map(Number);
+      base=new Date(by,bm-1,bd);
+    }
+    
+    if(base && !Number.isNaN(base.getTime()) && dueDate<base){
       return;
     }
 
