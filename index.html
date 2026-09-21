@@ -682,8 +682,34 @@ function renderThisMonthBar(){
   html+=`<div class="tmb-total-row"><span class="tmb-total-lbl">이번 달 저축 합계</span><span class="tmb-total-val">${fmt(total)}</span></div>`;
   rowsEl.innerHTML=html;
 }
-function getBudgetAmountForAccount(accId){let sum=0;const lm=getLinks();thisMonthSavings().forEach(item=>{if(lm[item.name]===accId)sum+=item.amount||0;});return sum}
+function getBudgetAmountForAccount(accId)
+  let sum=0;
+  let found=false;
 
+  const lm=getLinks();
+
+  thisMonthSavings().forEach(item=>{
+
+    const linkedByMap=
+      Number(lm[item.name])===Number(accId);
+
+    const linkedByAuto=
+      Number(item.autoSavingsAccountId)===Number(accId);
+
+    if(linkedByMap || linkedByAuto){
+      found=true;
+      sum+=Number(item.amount)||0;
+    }
+  });
+
+  return {
+    found,
+    amount:sum
+  };
+}
+function getBudgetAmountForAccount(accId){
+  return getBudgetInfoForAccount(accId).amount;
+}
 function openLinkModal(name){
   // 가계부 현재 멤버의 적금 데이터를 읽음 (savings와 budget이 같은 멤버 ID 공유)
   const budgetMemberId=activeMemberId('budget');
@@ -784,14 +810,73 @@ function calcPaidCount(acc){
   return cnt;
 }
 function calcPaid(acc){
-  const base=
-    (acc.initBalance||0)
-    +(acc.monthly||0)*calcPaidCount(acc)
-    +(acc.extra||0);
-  
-  const budgetAmt=getBudgetAmountForAccount(acc.id);
+  const monthly=Number(acc.monthly)||0;
 
-  return base + ((acc.monthly||0)>0 ? 0 : budgetAmt);
+  // 기본 자동이체 계산
+  let paid=
+    (Number(acc.initBalance)||0)
+    + monthly*calcPaidCount(acc)
+    + (Number(acc.extra)||0);
+
+  // 이번 달 가계부 실제 납입액
+  const budgetInfo=getBudgetInfoForAccount(acc.id);
+
+  // 이번 달 가계부에 연결된 기록이 없으면
+  // 자동이체 계산값 그대로 사용
+  if(!budgetInfo.found){
+    return paid;
+  }
+
+  // 자유납입 계좌는 가계부 금액을 그대로 추가
+  if(monthly<=0){
+    return paid+budgetInfo.amount;
+  }
+
+  const now=new Date();
+
+  const autoday=Number(acc.autoday)||0;
+
+  // 자동이체일이 설정되지 않았다면
+  // 가계부 실제 금액을 추가
+  if(!autoday){
+    return paid+budgetInfo.amount;
+  }
+
+  const dueDate=
+    new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      autoday
+    );
+
+  const base=
+    new Date(acc.registeredAt||acc.start);
+
+  let scheduledThisMonth=false;
+
+  // 이번 달 자동이체일이 이미 지났는지
+  if(dueDate<=now && dueDate>=base){
+    scheduledThisMonth=true;
+  }
+
+  // 만기 이후라면 자동이체 예정 없음
+  if(acc.end){
+    const endDate=new Date(acc.end);
+
+    if(dueDate>endDate){
+      scheduledThisMonth=false;
+    }
+  }
+
+  // 자동 계산에 이미 이번 달 월납입액이 들어갔다면
+  // 그 금액을 빼고 가계부의 실제 납입액으로 교체
+  if(scheduledThisMonth){
+    paid-=monthly;
+  }
+
+  paid+=budgetInfo.amount;
+
+  return paid;
 }
 function calcMaturity(acc){
   if(!acc.end) return calcPaid(acc); // 만기일 없으면 현재 납입액만
@@ -832,6 +917,8 @@ function updateSummary(){
 }
 
 function renderSavings(){
+  syncAutoSavingsToBudget(
+  activeMemberName('savings'));
   updateSummary();renderThisMonthBar();
   const accs=getAccounts(),el=document.getElementById('cards-list');
   if(!accs.length){el.innerHTML='<div class="empty-state">🏦<br>등록된 저축 내용이 없습니다.<br>+ 추가 버튼으로 시작해보세요.</div>';return}
@@ -1108,7 +1195,138 @@ function getMonthData(y,m){
 }
 function sumArr(arr){return(arr||[]).reduce((s,r)=>s+(r.amount||0),0)}
 
+function syncAutoSavingsToBudget(memberName){
+  const now=new Date();
+  const y=now.getFullYear();
+  const m=now.getMonth();
+
+  // 가계부와 적금관리에서 이름이 같은 멤버 찾기
+  const budgetMember=memberMeta.budget.members.find(x=>x.name===memberName);
+  const savingsMember=memberMeta.savings.members.find(x=>x.name===memberName);
+
+  if(!budgetMember || !savingsMember) return;
+
+  // 해당 멤버의 적금 계좌 불러오기
+  const sk='savings_'+savingsMember.id;
+
+  let savingsData={accounts:[]};
+
+  try{
+    savingsData=JSON.parse(localStorage.getItem(sk)||'{}');
+  }catch(e){}
+
+  const accs=savingsData.accounts||[];
+
+  // 해당 멤버의 가계부 불러오기
+  const bk='budget_'+budgetMember.id;
+
+  let budgetData={};
+
+  try{
+    budgetData=JSON.parse(localStorage.getItem(bk)||'{}');
+  }catch(e){}
+
+  const monthKey=
+    y+'-'+String(m+1).padStart(2,'0');
+
+  if(!budgetData[monthKey]){
+    budgetData[monthKey]={
+      income:[],
+      expense:{
+        fixed:[],
+        flex:[]
+      },
+      saving:[]
+    };
+  }
+
+  const d=budgetData[monthKey];
+
+  if(!Array.isArray(d.saving)){
+    d.saving=[];
+  }
+
+  let changed=false;
+
+  accs.forEach(acc=>{
+
+    const monthly=Number(acc.monthly)||0;
+    const autoday=Number(acc.autoday)||0;
+
+    // 월 납입액이나 자동이체일이 없으면 자동입력 안 함
+    if(monthly<=0 || autoday<=0) return;
+
+    // 이번 달 자동이체 날짜
+    const dueDate=new Date(y,m,autoday);
+
+    // 아직 자동이체일 전이면 입력하지 않음
+    if(dueDate>now) return;
+
+    // 웹페이지에 계좌를 등록하기 전의 자동이체는 자동생성하지 않음
+    const base=new Date(acc.registeredAt||acc.start);
+
+    if(!Number.isNaN(base.getTime()) && dueDate<base){
+      return;
+    }
+
+    // 만기가 지난 계좌는 자동입력하지 않음
+    if(acc.end){
+      const endDate=new Date(acc.end);
+
+      if(!Number.isNaN(endDate.getTime()) && dueDate>endDate){
+        return;
+      }
+    }
+
+    // 이미 이 계좌가 자동으로 만들어진 적이 있으면 그대로 둠
+    // 사용자가 금액을 수정하거나 0원으로 바꿔도 다시 덮어쓰지 않음
+    const autoRow=d.saving.find(
+      r=>Number(r.autoSavingsAccountId)===Number(acc.id)
+    );
+
+    if(autoRow) return;
+
+    // 같은 이름의 저축 항목이 이미 있는지 확인
+    const sameNameRow=d.saving.find(
+      r=>r.name===acc.name
+    );
+
+    if(sameNameRow){
+
+      // 금액이 비어있는 경우에만 자동입력
+      if(!(Number(sameNameRow.amount)>0)){
+        sameNameRow.amount=monthly;
+        sameNameRow.autoSavingsAccountId=acc.id;
+        changed=true;
+      }
+
+      // 이미 사람이 금액을 입력했다면 그대로 유지
+      return;
+    }
+
+    // 항목 자체가 없으면 새로 생성
+    d.saving.push({
+      name:acc.name,
+      amount:monthly,
+      autoSavingsAccountId:acc.id
+    });
+
+    changed=true;
+  });
+
+  if(changed){
+    localStorage.setItem(
+      bk,
+      JSON.stringify(budgetData)
+    );
+
+    // 기존 가계부 캐시도 같이 갱신
+    budgetCache[bk]=budgetData;
+  }
+
 function renderBudget(){
+  syncAutoSavingsToBudget(
+  activeMemberName('budget'));
   const d=getMonthData(budgetYear,budgetMonth);
   const ti=sumArr(d.income),tf=sumArr(d.expense.fixed),tx=sumArr(d.expense.flex),te=tf+tx,ts=sumArr(d.saving),net=ti-te-ts;
   document.getElementById('month-label').textContent=budgetYear+'년 '+(budgetMonth+1)+'월';
