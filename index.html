@@ -689,7 +689,6 @@ function getBudgetInfoForAccount(accId){
   const lm=getLinks();
 
   thisMonthSavings().forEach(item=>{
-
     const linkedByMap=
       Number(lm[item.name])===Number(accId);
 
@@ -1327,10 +1326,10 @@ function syncAutoSavingsToBudget(memberName){
       JSON.stringify(budgetData)
     );
   
-    // 기존 가계부 캐시도 같이 갱신
     budgetCache[bk]=budgetData;
   }
-}
+  
+  } // syncAutoSavingsToBudget 종료
 
 function renderBudget(){
   syncAutoSavingsToBudget(
