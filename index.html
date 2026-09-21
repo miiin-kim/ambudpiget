@@ -879,39 +879,39 @@ function calcPaid(acc){
   return paid;
 }
 function calcMaturity(acc){
-  if(!acc.end) return calcPaid(acc); // 만기일 없으면 현재 납입액만
-  const total=monthsBetween(acc.start,acc.end),elapsed=calcPaidCount(acc),remaining=Math.max(0,total-elapsed);
-  const init=acc.initBalance||0,paid=init+acc.monthly*elapsed+acc.extra,r=acc.rate/100/12;
-  if(!r) return paid + acc.monthly*remaining; // 이율 없으면 단순 합산
-  if(acc.interestType==='compound'){return Math.round(paid*Math.pow(1+r,remaining)+(remaining>0?acc.monthly*(Math.pow(1+r,remaining)-1)/r:0))}
-  return Math.round(paid+acc.monthly*remaining*(1+r*(remaining+1)/2));
-}
-function nextAutoDate(d){
-  const now=new Date();
+  // 만기일이 없으면 현재 실제 납입액
+  if(!acc.end) return calcPaid(acc);
 
-  // 시간은 무시하고 날짜만 비교
-  const today=new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate()
-  );
+  const total=monthsBetween(acc.start,acc.end);
+  const elapsed=calcPaidCount(acc);
+  const remaining=Math.max(0,total-elapsed);
 
-  const thisMonthDate=new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    d
-  );
+  const monthly=Number(acc.monthly)||0;
 
-  // 오늘이 자동이체일이면 오늘 날짜를 표시
-  if(today<=thisMonthDate){
-    return thisMonthDate;
+  // 가계부에서 수정한 이번 달 실제 납입액까지 반영
+  const paid=calcPaid(acc);
+
+  const r=(Number(acc.rate)||0)/100/12;
+
+  // 이율이 없으면 현재 실제 납입액 + 앞으로 예정된 월 납입액
+  if(!r){
+    return paid + monthly*remaining;
   }
 
-  // 이미 자동이체일이 지난 경우 다음 달
-  return new Date(
-    now.getFullYear(),
-    now.getMonth()+1,
-    d
+  // 복리
+  if(acc.interestType==='compound'){
+    return Math.round(
+      paid*Math.pow(1+r,remaining)
+      +(remaining>0
+        ? monthly*(Math.pow(1+r,remaining)-1)/r
+        : 0)
+    );
+  }
+
+  // 단리
+  return Math.round(
+    paid
+    + monthly*remaining*(1+r*(remaining+1)/2)
   );
 }
 function updateSummary(){
