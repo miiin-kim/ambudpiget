@@ -682,7 +682,7 @@ function renderThisMonthBar(){
   html+=`<div class="tmb-total-row"><span class="tmb-total-lbl">이번 달 저축 합계</span><span class="tmb-total-val">${fmt(total)}</span></div>`;
   rowsEl.innerHTML=html;
 }
-function getBudgetAmountForAccount(accId)
+function getBudgetInfoForAccount(accId){
   let sum=0;
   let found=false;
 
@@ -707,6 +707,7 @@ function getBudgetAmountForAccount(accId)
     amount:sum
   };
 }
+
 function getBudgetAmountForAccount(accId){
   return getBudgetInfoForAccount(accId).amount;
 }
@@ -1319,10 +1320,11 @@ function syncAutoSavingsToBudget(memberName){
       bk,
       JSON.stringify(budgetData)
     );
-
+  
     // 기존 가계부 캐시도 같이 갱신
     budgetCache[bk]=budgetData;
   }
+}
 
 function renderBudget(){
   syncAutoSavingsToBudget(
