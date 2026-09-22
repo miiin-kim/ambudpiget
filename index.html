@@ -1248,33 +1248,74 @@ function sumArr(arr){return(arr||[]).reduce((s,r)=>s+(r.amount||0),0)}
 
 function syncAutoSavingsToBudget(memberName){
   const now=new Date();
+
   const y=now.getFullYear();
   const m=now.getMonth();
 
-  // 가계부와 적금관리에서 이름이 같은 멤버 찾기
-  const budgetMember=memberMeta.budget.members.find(x=>x.name===memberName);
-  const savingsMember=memberMeta.savings.members.find(x=>x.name===memberName);
+  // 오늘은 시간 제외
+  const today=new Date(
+    y,
+    m,
+    now.getDate()
+  );
 
-  if(!budgetMember || !savingsMember) return;
+  // 적금 / 가계부에서 같은 이름의 멤버 찾기
+  const savingsMember=
+    memberMeta.savings.members.find(
+      x=>x.name===memberName
+    );
 
-  // 해당 멤버의 적금 계좌 불러오기
-  const sk='savings_'+savingsMember.id;
+  const budgetMember=
+    memberMeta.budget.members.find(
+      x=>x.name===memberName
+    );
 
-  let savingsData={accounts:[]};
+  if(!savingsMember || !budgetMember){
+    return;
+  }
+
+  // 적금 계좌 불러오기
+  const savingsKey=
+    'savings_'+savingsMember.id;
+
+  let savingsData={
+    accounts:[]
+  };
 
   try{
-    savingsData=JSON.parse(localStorage.getItem(sk)||'{}');
+    savingsData=
+      JSON.parse(
+        localStorage.getItem(savingsKey)||'{}'
+      );
   }catch(e){}
 
-  const accs=savingsData.accounts||[];
+  const accs=
+    savingsData.accounts||[];
 
-  // 해당 멤버의 가계부 불러오기
-  const bk='budget_'+budgetMember.id;
+  // 연결 정보 불러오기
+  const linksKey=
+    'links_'+savingsMember.id;
+
+  let links={};
+
+  try{
+    links=
+      JSON.parse(
+        localStorage.getItem(linksKey)||'{}'
+      );
+  }catch(e){}
+
+  // 가계부 데이터 불러오기
+  const budgetKey=
+    'budget_'+budgetMember.id;
 
   let budgetData={};
 
   try{
-    budgetData=JSON.parse(localStorage.getItem(bk)||'{}');
+    budgetData=
+      JSON.parse(
+        localStorage.getItem(budgetKey)||'{}'
+      );
   }catch(e){}
 
   const monthKey=
@@ -1299,74 +1340,115 @@ function syncAutoSavingsToBudget(memberName){
 
   let changed=false;
 
+  // YYYY-MM-DD를 로컬 날짜로 변환
+  function localDate(str){
+    if(!str) return null;
+
+    const [yy,mm,dd]=
+      str.split('-').map(Number);
+
+    const date=
+      new Date(yy,mm-1,dd);
+
+    return Number.isNaN(date.getTime())
+      ? null
+      : date;
+  }
+
   accs.forEach(acc=>{
 
-    const monthly=Number(acc.monthly)||0;
-    const autoday=Number(acc.autoday)||0;
+    const monthly=
+      Number(acc.monthly)||0;
 
-    // 월 납입액이나 자동이체일이 없으면 자동입력 안 함
-    if(monthly<=0 || autoday<=0) return;
+    const autoday=
+      Number(acc.autoday)||0;
 
-    // 이번 달 자동이체 날짜
-    const dueDate=new Date(y,m,autoday);
-
-    // 아직 자동이체일 전이면 입력하지 않음
-    if(dueDate>now) return;
-
-    // 웹페이지에 계좌를 등록하기 전의 자동이체는 자동생성하지 않음
-    // 가입일 이전이면 자동입력하지 않음
-    if(acc.start){
-      const [sy,sm,sd]=acc.start.split('-').map(Number);
-      const startDate=new Date(sy,sm-1,sd);
-    
-      if(
-        !Number.isNaN(startDate.getTime()) &&
-        dueDate<startDate
-      ){
-        return;
-      }
-    }
-    
-    // 만기일 이후이면 자동입력하지 않음
-    if(acc.end){
-      const [ey,em,ed]=acc.end.split('-').map(Number);
-      const endDate=new Date(ey,em-1,ed);
-    
-      if(
-        !Number.isNaN(endDate.getTime()) &&
-        dueDate>endDate
-      ){
-        return;
-      }
-    }  
-
-    // 이미 이 계좌가 자동으로 만들어진 적이 있으면 그대로 둠
-    // 사용자가 금액을 수정하거나 0원으로 바꿔도 다시 덮어쓰지 않음
-    const autoRow=d.saving.find(
-      r=>Number(r.autoSavingsAccountId)===Number(acc.id)
-    );
-
-    if(autoRow) return;
-
-    // 같은 이름의 저축 항목이 이미 있는지 확인
-    const sameNameRow=d.saving.find(
-      r=>r.name===acc.name
-    );
-
-    if(sameNameRow){
-
-      // 금액이 비어있는 경우에만 자동입력
-      if(!(Number(sameNameRow.amount)>0)){
-        sameNameRow.amount=monthly;
-        sameNameRow.autoSavingsAccountId=acc.id;
-        changed=true;
-      }
-
-      // 이미 사람이 금액을 입력했다면 그대로 유지
+    // 자동이체 설정이 없는 계좌 제외
+    if(monthly<=0 || autoday<=0){
       return;
     }
 
-    // 항목 자체가 없으면 새로 생성
+    // 해당 월의 마지막 날짜
+    const lastDay=
+      new Date(y,m+1,0).getDate();
+
+    // 31일 설정 등은 해당 월 마지막 날로 보정
+    const actualDay=
+      Math.min(autoday,lastDay);
+
+    const dueDate=
+      new Date(y,m,actualDay);
+
+    // 아직 자동이체일 전
+    if(dueDate>today){
+      return;
+    }
+
+    // 가입일 전이면 제외
+    const startDate=
+      localDate(acc.start);
+
+    if(
+      startDate &&
+      dueDate<startDate
+    ){
+      return;
+    }
+
+    // 만기 이후면 제외
+    const endDate=
+      localDate(acc.end);
+
+    if(
+      endDate &&
+      dueDate>endDate
+    ){
+      return;
+    }
+
+    // 1. 이미 자동 생성된 항목 찾기
+    let row=d.saving.find(
+      r=>
+        Number(r.autoSavingsAccountId)
+        ===Number(acc.id)
+    );
+
+    // 이미 자동관리 중인 항목이면
+    // 사용자가 수정한 값을 그대로 유지
+    if(row){
+      return;
+    }
+
+    // 2. 기존에 적금과 연결한 가계부 항목 찾기
+    row=d.saving.find(
+      r=>
+        Number(links[r.name])
+        ===Number(acc.id)
+    );
+
+    // 3. 없으면 상품명이 같은 항목 찾기
+    if(!row){
+      row=d.saving.find(
+        r=>r.name===acc.name
+      );
+    }
+
+    if(row){
+
+      // 기존 금액이 비어있는 경우만
+      // 자동이체 금액 입력
+      if(!(Number(row.amount)>0)){
+        row.amount=monthly;
+      }
+
+      // 앞으로 이 적금의 자동항목임을 표시
+      row.autoSavingsAccountId=acc.id;
+
+      changed=true;
+      return;
+    }
+
+    // 기존 항목 자체가 없으면 새로 추가
     d.saving.push({
       name:acc.name,
       amount:monthly,
@@ -1377,15 +1459,16 @@ function syncAutoSavingsToBudget(memberName){
   });
 
   if(changed){
+
     localStorage.setItem(
-      bk,
+      budgetKey,
       JSON.stringify(budgetData)
     );
-  
-    budgetCache[bk]=budgetData;
+
+    // 가계부 캐시도 같이 갱신
+    budgetCache[budgetKey]=budgetData;
   }
-  
-  } // syncAutoSavingsToBudget 종료
+}
 
 function renderBudget(){
   syncAutoSavingsToBudget(
