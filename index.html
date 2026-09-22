@@ -1407,56 +1407,127 @@ function syncAutoSavingsToBudget(memberName){
     }
 
     // 1. 이미 자동 생성된 항목 찾기
+    // 1. 이미 자동 생성/관리 중인 항목 찾기
     let row=d.saving.find(
       r=>
         Number(r.autoSavingsAccountId)
         ===Number(acc.id)
     );
-
-    // 이미 자동관리 중인 항목이면
-    // 사용자가 수정한 값을 그대로 유지
+    
     if(row){
+      const currentAmount=Number(row.amount)||0;
+    
+      const hasDefault=
+        row.autoDefaultAmount!==undefined &&
+        row.autoDefaultAmount!==null;
+    
+      const oldDefault=
+        hasDefault
+          ? Number(row.autoDefaultAmount)||0
+          : null;
+    
+      // 사용자가 직접 수정한 항목이면 그대로 유지
+      if(row.manualOverride===true){
+        return;
+      }
+    
+      // 예전 버전에서 만들어진 자동항목 처리
+      if(!hasDefault){
+    
+        // 0원 또는 원래 자동이체 금액이면
+        // 정상 자동항목으로 전환
+        if(
+          currentAmount===0 ||
+          currentAmount===monthly
+        ){
+          row.amount=monthly;
+          row.autoDefaultAmount=monthly;
+          row.manualOverride=false;
+        }
+        else{
+          // 30만/60만 등 다른 금액이면
+          // 사용자가 수정했던 것으로 간주
+          row.autoDefaultAmount=monthly;
+          row.manualOverride=true;
+        }
+    
+        changed=true;
+        return;
+      }
+    
+      // 기존 자동금액 그대로이거나 0원이면
+      // 현재 월 납입액으로 자동 갱신
+      if(
+        currentAmount===oldDefault ||
+        currentAmount===0
+      ){
+        row.amount=monthly;
+        row.autoDefaultAmount=monthly;
+        row.manualOverride=false;
+        changed=true;
+      }
+      else{
+        // 자동금액과 다르면 사용자 수정으로 판단
+        row.manualOverride=true;
+        changed=true;
+      }
+    
       return;
     }
-
+    
+    
     // 2. 기존에 적금과 연결한 가계부 항목 찾기
     row=d.saving.find(
       r=>
         Number(links[r.name])
         ===Number(acc.id)
     );
-
+    
+    
     // 3. 없으면 상품명이 같은 항목 찾기
     if(!row){
       row=d.saving.find(
         r=>r.name===acc.name
       );
     }
-
+    
+    
     if(row){
-
-      // 기존 금액이 비어있는 경우만
-      // 자동이체 금액 입력
-      if(!(Number(row.amount)>0)){
-        row.amount=monthly;
-      }
-
-      // 앞으로 이 적금의 자동항목임을 표시
+      const currentAmount=
+        Number(row.amount)||0;
+    
       row.autoSavingsAccountId=acc.id;
-
+      row.autoDefaultAmount=monthly;
+    
+      // 비어 있으면 자동이체 금액 입력
+      if(currentAmount<=0){
+        row.amount=monthly;
+        row.manualOverride=false;
+      }
+      // 기존 금액이 자동이체 금액과 같으면 자동항목
+      else if(currentAmount===monthly){
+        row.manualOverride=false;
+      }
+      // 다른 금액이면 사용자가 입력한 실제 금액으로 유지
+      else{
+        row.manualOverride=true;
+      }
+    
       changed=true;
       return;
     }
-
-    // 기존 항목 자체가 없으면 새로 추가
+    
+    
+    // 항목 자체가 없으면 새로 생성
     d.saving.push({
       name:acc.name,
       amount:monthly,
-      autoSavingsAccountId:acc.id
+      autoSavingsAccountId:acc.id,
+      autoDefaultAmount:monthly,
+      manualOverride:false
     });
-
+    
     changed=true;
-  });
 
   if(changed){
 
@@ -1520,7 +1591,18 @@ function onAmountInput(el){
     d.income[idx].amount=raw;
   }
   else if(sec==='saving'){
-    d.saving[idx].amount=raw;
+    const row=d.saving[idx];
+  
+    row.amount=raw;
+  
+    // 자동이체 항목을 사용자가 직접 수정한 경우
+    // 이후 자동금액으로 덮어쓰지 않음
+    if(
+      row.autoSavingsAccountId!==undefined &&
+      row.autoSavingsAccountId!==null
+    ){
+      row.manualOverride=true;
+    }
   }
 
   // 저장 + 적금관리 즉시 반영
