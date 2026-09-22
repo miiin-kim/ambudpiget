@@ -1517,7 +1517,6 @@ function syncAutoSavingsToBudget(memberName){
       return;
     }
     
-    
     // 항목 자체가 없으면 새로 생성
     d.saving.push({
       name:acc.name,
@@ -1528,18 +1527,19 @@ function syncAutoSavingsToBudget(memberName){
     });
     
     changed=true;
+    });
 
-  if(changed){
-
-    localStorage.setItem(
-      budgetKey,
-      JSON.stringify(budgetData)
-    );
-
-    // 가계부 캐시도 같이 갱신
-    budgetCache[budgetKey]=budgetData;
+    if(changed){
+  
+      localStorage.setItem(
+        budgetKey,
+        JSON.stringify(budgetData)
+      );
+  
+      // 가계부 캐시도 같이 갱신
+      budgetCache[budgetKey]=budgetData;
+    }
   }
-}
 
 function renderBudget(){
   syncAutoSavingsToBudget(
