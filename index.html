@@ -596,15 +596,16 @@ function getAccountStartDate(acc){
   return parseLocalDateValue(acc.start);
 }
 
-  const PAYDAY=21;
+const PAYDAY=21;
 
-  const AUTO_BUDGET_START_DATE=
-    new Date(2026,8,21);
+// 가계부 자동반영은 2026년 9월 월급부터 시작
+const AUTO_BUDGET_START_CYCLE='2026-09';
 
 function getBudgetCycleKey(date){
   let y=date.getFullYear();
   let m=date.getMonth();
 
+  // 1일~20일은 이전 달 월급에 포함
   if(date.getDate()<PAYDAY){
     m--;
 
@@ -614,30 +615,33 @@ function getBudgetCycleKey(date){
     }
   }
 
-  return y+'-'+String(m+1).padStart(2,'0');
+  return (
+    y+'-'+
+    String(m+1).padStart(2,'0')
+  );
 }
 
 function getBudgetCycleParts(date){
-  const key=getBudgetCycleKey(date);
-  const [y,m]=key.split('-').map(Number);
+  const key=
+    getBudgetCycleKey(date);
+
+  const [y,m]=
+    key.split('-').map(Number);
 
   return {
     year:y,
     month:m-1,
-    key
-  };
-}
-
-function getBudgetCycleRange(y,m){
-  return {
-    start:new Date(y,m,PAYDAY),
-    end:new Date(y,m+1,PAYDAY-1)
+    key:key
   };
 }
 
 function formatBudgetCycleLabel(y,m){
-  return y+'년 '+(m+1)+'월 월급';
-} 
+  return (
+    y+'년 '+
+    (m+1)+
+    '월 월급'
+  );
+}
 
 const MEMBER_KEY='member_meta_v1';
 
@@ -2559,26 +2563,26 @@ function sumArr(arr){
 function syncAutoSavingsToBudget(memberName){
   const now=new Date();
 
-  const y=now.getFullYear();
-  const m=now.getMonth();
-
   const today=new Date(
-    y,
-    m,
+    now.getFullYear(),
+    now.getMonth(),
     now.getDate()
   );
 
   const savingsMember=
     memberMeta.savings.members.find(
-      x=>x.name===memberName
+      m=>m.name===memberName
     );
 
   const budgetMember=
     memberMeta.budget.members.find(
-      x=>x.name===memberName
+      m=>m.name===memberName
     );
 
-  if(!savingsMember||!budgetMember){
+  if(
+    !savingsMember ||
+    !budgetMember
+  ){
     return;
   }
 
@@ -2590,24 +2594,14 @@ function syncAutoSavingsToBudget(memberName){
   };
 
   try{
-    savingsData=JSON.parse(
-      localStorage.getItem(savingsKey)||'{}'
-    );
+    savingsData=
+      JSON.parse(
+        localStorage.getItem(savingsKey)||'{}'
+      );
   }catch(e){}
 
   const accs=
     savingsData.accounts||[];
-
-  const linksKey=
-    'links_'+savingsMember.id;
-
-  let links={};
-
-  try{
-    links=JSON.parse(
-      localStorage.getItem(linksKey)||'{}'
-    );
-  }catch(e){}
 
   const budgetKey=
     'budget_'+budgetMember.id;
@@ -2615,9 +2609,22 @@ function syncAutoSavingsToBudget(memberName){
   let budgetData={};
 
   try{
-    budgetData=JSON.parse(
-      localStorage.getItem(budgetKey)||'{}'
-    );
+    budgetData=
+      JSON.parse(
+        localStorage.getItem(budgetKey)||'{}'
+      );
+  }catch(e){}
+
+  const linksKey=
+    'links_'+savingsMember.id;
+
+  let links={};
+
+  try{
+    links=
+      JSON.parse(
+        localStorage.getItem(linksKey)||'{}'
+      );
   }catch(e){}
 
   let changed=false;
@@ -2630,6 +2637,7 @@ function syncAutoSavingsToBudget(memberName){
     const autoday=
       Number(acc.autoday)||0;
 
+    // 월 납입액이나 자동이체일이 없으면 자동처리 안 함
     if(
       monthly<=0 ||
       autoday<=0
@@ -2637,11 +2645,18 @@ function syncAutoSavingsToBudget(memberName){
       return;
     }
 
-    // 이번 달 실제 자동이체 날짜
+    /*
+      이번 달 실제 자동이체일 계산
+
+      예:
+      오늘 2026-10-05
+      자동이체일 1일
+      → 2026-10-01
+    */
     const lastDay=
       new Date(
-        y,
-        m+1,
+        now.getFullYear(),
+        now.getMonth()+1,
         0
       ).getDate();
 
@@ -2653,25 +2668,27 @@ function syncAutoSavingsToBudget(memberName){
 
     const dueDate=
       new Date(
-        y,
-        m,
+        now.getFullYear(),
+        now.getMonth(),
         actualDay
       );
 
-    if(dueDate<AUTO_BUDGET_START_DATE){
-      return;
-    }
-
-    // 아직 이체일 전
+    // 아직 자동이체 날짜가 안 됐으면 제외
     if(dueDate>today){
       return;
     }
 
+    /*
+      앱 등록일이 아니라
+      실제 적금 시작일 기준으로 확인
+    */
     const startDate=
-      getAccountStartDate(acc);
-    
-    // 실제 적금 가입일 이전에는 자동이체 없음
-    if(startDate&&dueDate<startDate){
+      parseLocalDateValue(acc.start);
+
+    if(
+      startDate &&
+      dueDate<startDate
+    ){
       return;
     }
 
@@ -2687,18 +2704,33 @@ function syncAutoSavingsToBudget(memberName){
     }
 
     /*
-      실제 출금일이 속한 월급 가계부 결정
+      핵심
 
-      예:
-      2026-10-01 출금
-      → 2026-09 월급
-      → 9/21~10/20 사이클
+      10/1
+      ↓
+      getBudgetCycleKey(10/1)
+      ↓
+      2026-09
     */
     const monthKey=
       getBudgetCycleKey(dueDate);
 
+    // 2026년 9월 월급 이전은 자동반영하지 않음
+    if(
+      monthKey<
+      AUTO_BUDGET_START_CYCLE
+    ){
+      return;
+    }
+
     const dueDateKey=
-      localDateKey(dueDate);
+      dueDate.getFullYear()+'-'+
+      String(
+        dueDate.getMonth()+1
+      ).padStart(2,'0')+'-'+
+      String(
+        dueDate.getDate()
+      ).padStart(2,'0');
 
     if(!budgetData[monthKey]){
       budgetData[monthKey]={
@@ -2713,6 +2745,10 @@ function syncAutoSavingsToBudget(memberName){
 
     const d=
       budgetData[monthKey];
+
+    if(!Array.isArray(d.income)){
+      d.income=[];
+    }
 
     if(
       !d.expense ||
@@ -2732,17 +2768,12 @@ function syncAutoSavingsToBudget(memberName){
       d.expense.flex=[];
     }
 
-    if(!Array.isArray(d.income)){
-      d.income=[];
-    }
-
     if(!Array.isArray(d.saving)){
       d.saving=[];
     }
 
     /*
-      이미 이 적금에서 자동 생성된
-      가계부 저축 항목 찾기
+      이미 이 적금에서 자동생성한 행 찾기
     */
     let row=
       d.saving.find(
@@ -2753,72 +2784,37 @@ function syncAutoSavingsToBudget(memberName){
 
     if(row){
 
-      // 실제 출금일 기록
-      if(
-        row.autoSavingsDate!==dueDateKey
-      ){
-        row.autoSavingsDate=
-          dueDateKey;
-
-        changed=true;
-      }
-
-      const currentAmount=
-        Number(row.amount)||0;
-
-      const hasDefault=
-        row.autoDefaultAmount!==undefined &&
-        row.autoDefaultAmount!==null;
-
-      const oldDefault=
-        hasDefault
-          ? Number(row.autoDefaultAmount)||0
-          : null;
+      row.autoSavingsDate=
+        dueDateKey;
 
       /*
-        사용자가 직접 실제 납입액을 수정했다면
-        자동금액으로 덮어쓰지 않는다.
+        사용자가 금액을 직접 수정했다면
+        절대로 자동금액으로 덮어쓰지 않음
       */
       if(row.manualOverride===true){
-        return;
-      }
-
-      /*
-        이전 버전에서 만들어진 자동항목
-      */
-      if(!hasDefault){
-
-        if(
-          currentAmount===0 ||
-          currentAmount===monthly
-        ){
-          row.amount=
-            monthly;
-
-          row.autoDefaultAmount=
-            monthly;
-
-          row.manualOverride=
-            false;
-        }
-        else{
-          row.autoDefaultAmount=
-            monthly;
-
-          row.manualOverride=
-            true;
-        }
-
         changed=true;
         return;
       }
 
+      const oldDefault=
+        Number(
+          row.autoDefaultAmount
+        )||0;
+
+      const currentAmount=
+        Number(
+          row.amount
+        )||0;
+
       /*
-        자동입력된 기본 금액 그대로라면
-        현재 설정 월납입액으로 갱신
+        자동 기본값이거나
+        이전 자동금액 그대로면
+        현재 월 납입액으로 맞춤
       */
       if(
+        row.autoDefaultAmount===undefined ||
         currentAmount===oldDefault ||
+        currentAmount===monthly ||
         currentAmount===0
       ){
         row.amount=
@@ -2829,22 +2825,18 @@ function syncAutoSavingsToBudget(memberName){
 
         row.manualOverride=
           false;
-
-        changed=true;
       }
       else{
         row.manualOverride=
           true;
-
-        changed=true;
       }
 
+      changed=true;
       return;
     }
 
     /*
-      가계부에서 수동으로 연결해 둔
-      기존 저축 항목 찾기
+      수동 연결돼 있는 가계부 저축 항목 탐색
     */
     row=
       d.saving.find(
@@ -2854,7 +2846,7 @@ function syncAutoSavingsToBudget(memberName){
       );
 
     /*
-      상품명이 같은 항목 찾기
+      이름이 같은 항목도 확인
     */
     if(!row){
       row=
@@ -2864,20 +2856,19 @@ function syncAutoSavingsToBudget(memberName){
     }
 
     if(row){
-
-      const currentAmount=
+      const existingAmount=
         Number(row.amount)||0;
 
       row.autoSavingsAccountId=
         acc.id;
 
-      row.autoDefaultAmount=
-        monthly;
-
       row.autoSavingsDate=
         dueDateKey;
 
-      if(currentAmount<=0){
+      row.autoDefaultAmount=
+        monthly;
+
+      if(existingAmount<=0){
         row.amount=
           monthly;
 
@@ -2885,15 +2876,15 @@ function syncAutoSavingsToBudget(memberName){
           false;
       }
       else if(
-        currentAmount===monthly
+        existingAmount===monthly
       ){
         row.manualOverride=
           false;
       }
       else{
         /*
-          기존 금액이 다르면
-          실제 납입액으로 간주
+          사용자가 이미 다른 실제 금액을 입력했다면
+          그 금액 유지
         */
         row.manualOverride=
           true;
@@ -2904,11 +2895,16 @@ function syncAutoSavingsToBudget(memberName){
     }
 
     /*
-      기존 항목이 없으면 새로 생성
+      아무 항목도 없으면 새로 생성
+
+      주택청약 monthly=20000
+      → 20,000원
+
+      미래적금 monthly=500000
+      → 500,000원
     */
     d.saving.push({
       name:acc.name,
-
       amount:monthly,
 
       autoSavingsAccountId:
@@ -2927,7 +2923,6 @@ function syncAutoSavingsToBudget(memberName){
   });
 
   if(changed){
-
     localStorage.setItem(
       budgetKey,
       JSON.stringify(budgetData)
