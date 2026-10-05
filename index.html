@@ -578,15 +578,22 @@ function getAccountBaseDate(acc){
   const startDate=
     parseLocalDateValue(acc.start);
 
-  if(startDate){
-    return startDate;
-  }
-
-  // 예전 데이터에 start가 없는 경우만 보조로 사용
   const registeredDate=
     parseLocalDateValue(acc.registeredAt);
 
-  return registeredDate||null;
+  // 현재 납입액(initBalance)에 과거 납입분이 이미 포함되어 있으므로
+  // 가입일과 앱 등록일 중 더 늦은 날짜부터 자동 계산
+  if(startDate&&registeredDate){
+    return startDate>registeredDate
+      ? startDate
+      : registeredDate;
+  }
+
+  return startDate||registeredDate||null;
+}
+
+function getAccountStartDate(acc){
+  return parseLocalDateValue(acc.start);
 }
 
   const PAYDAY=21;
@@ -1068,34 +1075,41 @@ function getBudgetInfoForAccount(accId){
 
   const now=new Date();
 
-  let cycleKey=getBudgetCycleKey(now);
+  let cycleKey=
+    getBudgetCycleKey(now);
 
-  if(acc&&Number(acc.autoday)>0){
-    const lastDay=new Date(
-      now.getFullYear(),
-      now.getMonth()+1,
-      0
-    ).getDate();
+  if(
+    acc&&
+    Number(acc.autoday)>0
+  ){
+    const lastDay=
+      new Date(
+        now.getFullYear(),
+        now.getMonth()+1,
+        0
+      ).getDate();
 
-    const actualDay=Math.min(
-      Number(acc.autoday),
-      lastDay
-    );
+    const actualDay=
+      Math.min(
+        Number(acc.autoday),
+        lastDay
+      );
 
-    const dueDate=new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      actualDay
-    );
+    const dueDate=
+      new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        actualDay
+      );
 
-    const today=new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate()
-    );
+    const today=
+      new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate()
+      );
 
-    // 아직 실제 자동이체일 전이면
-    // 가계부 금액을 적금관리 현재 납입액에 반영하지 않음
+    // 아직 실제 자동이체일 전
     if(dueDate>today){
       return {
         found:false,
@@ -1103,46 +1117,62 @@ function getBudgetInfoForAccount(accId){
       };
     }
 
-    const base=getAccountBaseDate(acc);
+    // 여기서는 앱 등록일이 아니라
+    // 실제 적금 시작일만 확인
+    const startDate=
+      getAccountStartDate(acc);
 
-    if(base&&dueDate<base){
+    if(
+      startDate&&
+      dueDate<startDate
+    ){
       return {
         found:false,
         amount:0
       };
     }
 
-    const endDate=parseLocalDateValue(acc.end);
+    const endDate=
+      parseLocalDateValue(acc.end);
 
-    if(endDate&&dueDate>endDate){
+    if(
+      endDate&&
+      dueDate>endDate
+    ){
       return {
         found:false,
         amount:0
       };
     }
 
-    cycleKey=getBudgetCycleKey(dueDate);
+    // 10/1 자동이체라면
+    // 9월 월급 가계부를 읽음
+    cycleKey=
+      getBudgetCycleKey(dueDate);
   }
 
-  const savingsName=activeMemberName('savings');
+  const savingsName=
+    activeMemberName('savings');
 
   const budgetMember=
     memberMeta.budget.members.find(
       m=>m.name===savingsName
     );
 
-  const bk='budget_'+(
-    budgetMember
-      ? budgetMember.id
-      : activeMemberId('savings')
-  );
+  const bk=
+    'budget_'+(
+      budgetMember
+        ? budgetMember.id
+        : activeMemberId('savings')
+    );
 
   let bd={};
 
   try{
-    bd=JSON.parse(
-      localStorage.getItem(bk)||'{}'
-    );
+    bd=
+      JSON.parse(
+        localStorage.getItem(bk)||'{}'
+      );
   }catch(e){}
 
   const rows=
@@ -1150,18 +1180,26 @@ function getBudgetInfoForAccount(accId){
       ? (bd[cycleKey].saving||[])
       : [];
 
-  const lm=getLinks();
+  const lm=
+    getLinks();
 
   rows.forEach(item=>{
     const linkedByMap=
-      Number(lm[item.name])===Number(accId);
+      Number(lm[item.name])
+      ===Number(accId);
 
     const linkedByAuto=
-      Number(item.autoSavingsAccountId)===Number(accId);
+      Number(item.autoSavingsAccountId)
+      ===Number(accId);
 
-    if(linkedByMap||linkedByAuto){
+    if(
+      linkedByMap||
+      linkedByAuto
+    ){
       found=true;
-      sum+=Number(item.amount)||0;
+
+      sum+=
+        Number(item.amount)||0;
     }
   });
 
@@ -1424,12 +1462,15 @@ function calcPaidCount(acc){
 }
 
 function calcPaid(acc){
-  const monthly=Number(acc.monthly)||0;
+  const monthly=
+    Number(acc.monthly)||0;
 
   let paid=
     (Number(acc.initBalance)||0)
-    + monthly*calcPaidCount(acc)
-    + (Number(acc.extra)||0);
+    +
+    monthly*calcPaidCount(acc)
+    +
+    (Number(acc.extra)||0);
 
   const budgetInfo=
     getBudgetInfoForAccount(acc.id);
@@ -1442,7 +1483,8 @@ function calcPaid(acc){
     return paid+budgetInfo.amount;
   }
 
-  const now=new Date();
+  const now=
+    new Date();
 
   const autoday=
     Number(acc.autoday)||0;
@@ -1451,31 +1493,50 @@ function calcPaid(acc){
     return paid+budgetInfo.amount;
   }
 
-  const lastDay=new Date(
-    now.getFullYear(),
-    now.getMonth()+1,
-    0
-  ).getDate();
+  const lastDay=
+    new Date(
+      now.getFullYear(),
+      now.getMonth()+1,
+      0
+    ).getDate();
 
-  const dueDate=new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    Math.min(
-      autoday,
-      lastDay
-    )
-  );
+  const dueDate=
+    new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      Math.min(
+        autoday,
+        lastDay
+      )
+    );
 
-  const base=getAccountBaseDate(acc);
+  const today=
+    new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate()
+    );
 
-  let scheduledThisMonth=false;
+  // 아직 자동이체일 전
+  if(dueDate>today){
+    return paid;
+  }
 
+  const base=
+    getAccountBaseDate(acc);
+
+  /*
+    앱에 계좌를 등록하기 전에 이미 발생한 자동이체는
+    사용자가 입력한 현재 납입액(initBalance)에
+    이미 포함되어 있다고 봄.
+
+    따라서 가계부 금액을 또 더하지 않는다.
+  */
   if(
     base&&
-    dueDate<=now&&
-    dueDate>=base
+    dueDate<base
   ){
-    scheduledThisMonth=true;
+    return paid;
   }
 
   const endDate=
@@ -1485,12 +1546,21 @@ function calcPaid(acc){
     endDate&&
     dueDate>endDate
   ){
-    scheduledThisMonth=false;
+    return paid;
   }
 
-  if(scheduledThisMonth){
-    paid-=monthly;
-  }
+  /*
+    calcPaidCount에서 이번 달 기본 월납입액이
+    이미 1회 포함되어 있으므로 빼고,
+    가계부의 실제 납입액으로 교체한다.
+
+    예:
+    기본 월납입액 500,000
+    실제 가계부 금액 470,000
+
+    -500,000 +470,000
+  */
+  paid-=monthly;
 
   paid+=budgetInfo.amount;
 
@@ -2597,15 +2667,11 @@ function syncAutoSavingsToBudget(memberName){
       return;
     }
 
-    // 적금 시작일 / 앱 등록일 중 늦은 날짜
-    const base=
-      getAccountBaseDate(acc);
-
-    // 적금 시작 전에 발생하는 자동이체는 제외
-    if(
-      base &&
-      dueDate<base
-    ){
+    const startDate=
+      getAccountStartDate(acc);
+    
+    // 실제 적금 가입일 이전에는 자동이체 없음
+    if(startDate&&dueDate<startDate){
       return;
     }
 
