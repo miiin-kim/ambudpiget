@@ -553,6 +553,27 @@ function parseLocalDateValue(value){
       );
 }
 
+function localDateKey(date){
+  if(!date) return '';
+
+  return (
+    date.getFullYear()+'-'+
+    String(date.getMonth()+1).padStart(2,'0')+'-'+
+    String(date.getDate()).padStart(2,'0')
+  );
+}
+
+function formatMonthDay(value){
+  const d=parseLocalDateValue(value);
+
+  if(!d) return '';
+
+  return (
+    (d.getMonth()+1)+'/'+
+    d.getDate()
+  );
+}
+
 function getAccountBaseDate(acc){
   const startDate=parseLocalDateValue(acc.start);
   const registeredDate=parseLocalDateValue(acc.registeredAt);
@@ -603,15 +624,8 @@ function getBudgetCycleRange(y,m){
 }
 
 function formatBudgetCycleLabel(y,m){
-  const range=getBudgetCycleRange(y,m);
-
-  return (
-    y+'년 '+(m+1)+'월 월급 · '+
-    (range.start.getMonth()+1)+'/'+range.start.getDate()+
-    ' ~ '+
-    (range.end.getMonth()+1)+'/'+range.end.getDate()
-  );
-}
+  return y+'년 '+(m+1)+'월 월급';
+} 
 
 const MEMBER_KEY='member_meta_v1';
 
@@ -1068,6 +1082,21 @@ function getBudgetInfoForAccount(accId){
       now.getMonth(),
       actualDay
     );
+
+    const today=new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate()
+    );
+
+    // 아직 실제 자동이체일 전이면
+    // 가계부 금액을 적금관리 현재 납입액에 반영하지 않음
+    if(dueDate>today){
+      return {
+        found:false,
+        amount:0
+      };
+    }
 
     const base=getAccountBaseDate(acc);
 
@@ -2519,16 +2548,21 @@ function syncAutoSavingsToBudget(memberName){
   let changed=false;
 
   accs.forEach(acc=>{
+
     const monthly=
       Number(acc.monthly)||0;
 
     const autoday=
       Number(acc.autoday)||0;
 
-    if(monthly<=0||autoday<=0){
+    if(
+      monthly<=0 ||
+      autoday<=0
+    ){
       return;
     }
 
+    // 이번 달 실제 자동이체 날짜
     const lastDay=
       new Date(
         y,
@@ -2549,29 +2583,47 @@ function syncAutoSavingsToBudget(memberName){
         actualDay
       );
 
+    // 아직 이체일 전
     if(dueDate>today){
       return;
     }
 
+    // 적금 시작일 / 앱 등록일 중 늦은 날짜
     const base=
       getAccountBaseDate(acc);
 
-    if(base&&dueDate<base){
+    // 적금 시작 전에 발생하는 자동이체는 제외
+    if(
+      base &&
+      dueDate<base
+    ){
       return;
     }
 
+    // 만기 이후 제외
     const endDate=
       parseLocalDateValue(acc.end);
 
     if(
-      endDate&&
+      endDate &&
       dueDate>endDate
     ){
       return;
     }
 
+    /*
+      실제 출금일이 속한 월급 가계부 결정
+
+      예:
+      2026-10-01 출금
+      → 2026-09 월급
+      → 9/21~10/20 사이클
+    */
     const monthKey=
       getBudgetCycleKey(dueDate);
+
+    const dueDateKey=
+      localDateKey(dueDate);
 
     if(!budgetData[monthKey]){
       budgetData[monthKey]={
@@ -2588,7 +2640,7 @@ function syncAutoSavingsToBudget(memberName){
       budgetData[monthKey];
 
     if(
-      !d.expense||
+      !d.expense ||
       Array.isArray(d.expense)
     ){
       d.expense={
@@ -2613,6 +2665,10 @@ function syncAutoSavingsToBudget(memberName){
       d.saving=[];
     }
 
+    /*
+      이미 이 적금에서 자동 생성된
+      가계부 저축 항목 찾기
+    */
     let row=
       d.saving.find(
         r=>
@@ -2621,11 +2677,22 @@ function syncAutoSavingsToBudget(memberName){
       );
 
     if(row){
+
+      // 실제 출금일 기록
+      if(
+        row.autoSavingsDate!==dueDateKey
+      ){
+        row.autoSavingsDate=
+          dueDateKey;
+
+        changed=true;
+      }
+
       const currentAmount=
         Number(row.amount)||0;
 
       const hasDefault=
-        row.autoDefaultAmount!==undefined&&
+        row.autoDefaultAmount!==undefined &&
         row.autoDefaultAmount!==null;
 
       const oldDefault=
@@ -2633,43 +2700,77 @@ function syncAutoSavingsToBudget(memberName){
           ? Number(row.autoDefaultAmount)||0
           : null;
 
+      /*
+        사용자가 직접 실제 납입액을 수정했다면
+        자동금액으로 덮어쓰지 않는다.
+      */
       if(row.manualOverride===true){
         return;
       }
 
+      /*
+        이전 버전에서 만들어진 자동항목
+      */
       if(!hasDefault){
+
         if(
-          currentAmount===0||
+          currentAmount===0 ||
           currentAmount===monthly
         ){
-          row.amount=monthly;
-          row.autoDefaultAmount=monthly;
-          row.manualOverride=false;
-        }else{
-          row.autoDefaultAmount=monthly;
-          row.manualOverride=true;
+          row.amount=
+            monthly;
+
+          row.autoDefaultAmount=
+            monthly;
+
+          row.manualOverride=
+            false;
+        }
+        else{
+          row.autoDefaultAmount=
+            monthly;
+
+          row.manualOverride=
+            true;
         }
 
         changed=true;
         return;
       }
 
+      /*
+        자동입력된 기본 금액 그대로라면
+        현재 설정 월납입액으로 갱신
+      */
       if(
-        currentAmount===oldDefault||
+        currentAmount===oldDefault ||
         currentAmount===0
       ){
-        row.amount=monthly;
-        row.autoDefaultAmount=monthly;
-        row.manualOverride=false;
+        row.amount=
+          monthly;
+
+        row.autoDefaultAmount=
+          monthly;
+
+        row.manualOverride=
+          false;
+
         changed=true;
-      }else{
-        row.manualOverride=true;
+      }
+      else{
+        row.manualOverride=
+          true;
+
         changed=true;
       }
 
       return;
     }
 
+    /*
+      가계부에서 수동으로 연결해 둔
+      기존 저축 항목 찾기
+    */
     row=
       d.saving.find(
         r=>
@@ -2677,6 +2778,9 @@ function syncAutoSavingsToBudget(memberName){
           ===Number(acc.id)
       );
 
+    /*
+      상품명이 같은 항목 찾기
+    */
     if(!row){
       row=
         d.saving.find(
@@ -2685,6 +2789,7 @@ function syncAutoSavingsToBudget(memberName){
     }
 
     if(row){
+
       const currentAmount=
         Number(row.amount)||0;
 
@@ -2694,24 +2799,52 @@ function syncAutoSavingsToBudget(memberName){
       row.autoDefaultAmount=
         monthly;
 
+      row.autoSavingsDate=
+        dueDateKey;
+
       if(currentAmount<=0){
-        row.amount=monthly;
-        row.manualOverride=false;
-      }else if(currentAmount===monthly){
-        row.manualOverride=false;
-      }else{
-        row.manualOverride=true;
+        row.amount=
+          monthly;
+
+        row.manualOverride=
+          false;
+      }
+      else if(
+        currentAmount===monthly
+      ){
+        row.manualOverride=
+          false;
+      }
+      else{
+        /*
+          기존 금액이 다르면
+          실제 납입액으로 간주
+        */
+        row.manualOverride=
+          true;
       }
 
       changed=true;
       return;
     }
 
+    /*
+      기존 항목이 없으면 새로 생성
+    */
     d.saving.push({
       name:acc.name,
+
       amount:monthly,
-      autoSavingsAccountId:acc.id,
-      autoDefaultAmount:monthly,
+
+      autoSavingsAccountId:
+        acc.id,
+
+      autoDefaultAmount:
+        monthly,
+
+      autoSavingsDate:
+        dueDateKey,
+
       manualOverride:false
     });
 
@@ -2719,6 +2852,7 @@ function syncAutoSavingsToBudget(memberName){
   });
 
   if(changed){
+
     localStorage.setItem(
       budgetKey,
       JSON.stringify(budgetData)
@@ -2977,10 +3111,38 @@ function onAmountInput(el){
 }
 
 function makeRow(row,i,sec,sub){
+
   const disp=
     toComma(
       row.amount||0
     );
+
+  let rowLabel=
+    row.name;
+
+  /*
+    자동이체로 생성된 저축이라면
+    실제 출금일 표시
+
+    예:
+    10/1 · 주택청약
+  */
+  if(
+    sec==='saving' &&
+    row.autoSavingsDate
+  ){
+    const dateText=
+      formatMonthDay(
+        row.autoSavingsDate
+      );
+
+    if(dateText){
+      rowLabel=
+        dateText+
+        ' · '+
+        row.name;
+    }
+  }
 
   return `
     <div
@@ -2989,10 +3151,14 @@ function makeRow(row,i,sec,sub){
       data-index="${i}"
       data-subcat="${sub}"
     >
-      <span class="drag-handle" data-drag="true">☰</span>
+
+      <span
+        class="drag-handle"
+        data-drag="true"
+      >☰</span>
 
       <div class="budget-row-label">
-        ${row.name}
+        ${rowLabel}
       </div>
 
       <input
@@ -3001,9 +3167,11 @@ function makeRow(row,i,sec,sub){
         inputmode="numeric"
         value="${disp}"
         placeholder="0"
+
         data-section="${sec}"
         data-index="${i}"
         data-subcat="${sub}"
+
         onfocus="onAmountFocus(this)"
         onblur="onAmountBlur(this)"
         oninput="onAmountInput(this)"
@@ -3011,8 +3179,13 @@ function makeRow(row,i,sec,sub){
 
       <button
         class="del-row-btn"
-        onclick="deleteRow('${sec}',${i},'${sub}')"
+        onclick="deleteRow(
+          '${sec}',
+          ${i},
+          '${sub}'
+        )"
       >×</button>
+
     </div>`;
 }
 
