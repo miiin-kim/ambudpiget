@@ -575,19 +575,24 @@ function formatMonthDay(value){
 }
 
 function getAccountBaseDate(acc){
-  const startDate=parseLocalDateValue(acc.start);
-  const registeredDate=parseLocalDateValue(acc.registeredAt);
+  const startDate=
+    parseLocalDateValue(acc.start);
 
-  if(startDate&&registeredDate){
-    return startDate>registeredDate
-      ? startDate
-      : registeredDate;
+  if(startDate){
+    return startDate;
   }
 
-  return startDate||registeredDate||null;
+  // 예전 데이터에 start가 없는 경우만 보조로 사용
+  const registeredDate=
+    parseLocalDateValue(acc.registeredAt);
+
+  return registeredDate||null;
 }
 
-const PAYDAY=21;
+  const PAYDAY=21;
+
+  const AUTO_BUDGET_START_DATE=
+    new Date(2026,8,21);
 
 function getBudgetCycleKey(date){
   let y=date.getFullYear();
@@ -2582,6 +2587,10 @@ function syncAutoSavingsToBudget(memberName){
         m,
         actualDay
       );
+
+    if(dueDate<AUTO_BUDGET_START_DATE){
+      return;
+    }
 
     // 아직 이체일 전
     if(dueDate>today){
