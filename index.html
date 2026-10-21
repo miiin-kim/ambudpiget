@@ -158,6 +158,13 @@ body{font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:var(--bg)
 .budget-check{width:19px;height:19px;flex-shrink:0;accent-color:var(--blue);cursor:pointer;margin:0 5px 0 7px}
 .budget-row.completed .budget-row-label{text-decoration:line-through;text-decoration-thickness:1.5px;color:var(--text3)}
 .budget-row.completed .budget-amount{text-decoration:line-through;text-decoration-thickness:1.5px;color:var(--text3)}
+.saving-row{flex-wrap:wrap}
+.saving-row .budget-row-label{min-width:80px}
+.saving-row-controls{width:100%;display:flex;gap:8px;align-items:center;padding:0 12px 10px 42px;flex-wrap:wrap}
+.saving-row-controls label{font-size:11px;color:var(--text2);display:flex;align-items:center;gap:5px}
+.saving-row-controls input,.saving-row-controls select{font-size:12px;max-width:175px;border:1px solid var(--border2);padding:6px;border-radius:6px;background:var(--surface);color:var(--text);min-height:32px}
+.saving-row-controls select{max-width:195px}
+.saving-row-hint{font-size:10px;color:var(--text3);width:100%}
 .budget-row.dragging{opacity:.4}
 .budget-row.drag-over{background:var(--blue-bg);border-top:2px solid var(--blue)}
 .drag-handle{padding:14px 6px 14px 12px;color:var(--text3);font-size:14px;cursor:grab;flex-shrink:0;line-height:1;touch-action:none;user-select:none}
@@ -1488,9 +1495,33 @@ function monthsBetween(s,e){
 
 function calcPaidCount(acc){ return 0; }
 
+// 가계부에 입력한 날짜가 도래한 금액만 적금 잔액에 계산상 합산합니다.
+// 기존 계좌 원본 데이터(initBalance/extra)는 변경하지 않으므로 중복 적립되지 않습니다.
+function getDatedBudgetDeposits(acc){
+  const savingsMember=memberMeta.savings.members.find(m=>m.id===activeMemberId('savings'));
+  if(!savingsMember)return 0;
+  const budgetMember=memberMeta.budget.members.find(m=>m.name===savingsMember.name);
+  if(!budgetMember)return 0;
+  let data={};
+  try{data=JSON.parse(localStorage.getItem('budget_'+budgetMember.id)||'{}');}catch(e){}
+  // 저장 직전 변경사항도 포함합니다.
+  if(budgetCache['budget_'+budgetMember.id])data=budgetCache['budget_'+budgetMember.id];
+  const today=localDateKey(new Date());
+  let total=0;
+  Object.values(data).forEach(month=>{
+    if(!Array.isArray(month?.saving))return;
+    month.saving.forEach(row=>{
+      if(!row.depositDate || !/^\d{4}-\d{2}-\d{2}$/.test(row.depositDate))return;
+      if(row.depositDate>today || !parseLocalDateValue(row.depositDate))return;
+      // 명시적으로 연결한 계좌만 합산. 기존 이름기반 자동연결은 적용하지 않음.
+      if(Number(row.linkedAccountId)!==Number(acc.id) || row.linkedAccountId===null || row.linkedAccountId===undefined || row.linkedAccountId==='')return;
+      total+=Math.max(0,Number(row.amount)||0);
+    });
+  });
+  return total;
+}
 function calcPaid(acc){
-  // 실제 수동 기록된 납입액만 합산합니다.
-  return (Number(acc.initBalance)||0)+(Number(acc.extra)||0);
+  return (Number(acc.initBalance)||0)+(Number(acc.extra)||0)+getDatedBudgetDeposits(acc);
 }
 
 function calcMaturity(acc){
@@ -1697,15 +1728,14 @@ function renderSavings(){
           ? `<span class="rate-badge" style="background:${c.bg};color:${c.text}">${pct(acc.rate)}</span>`
           : '';
 
-      const autoInfo='수동 납입 · ';
+      const autoInfo='납입 현황 · ';
 
       const progressMeta=
         acc.end
           ? `<span><span class="auto-dot" style="background:${c.bar}"></span>${autoInfo}${elapsedFromStart}/${total}개월</span><span>${prog}%</span>`
           : `<span><span class="auto-dot" style="background:${c.bar}"></span>${autoInfo}${elapsedFromStart}개월째</span>`;
 
-      const budgetAmt=
-        getBudgetAmountForAccount(acc.id);
+      const budgetAmt=getDatedBudgetDeposits(acc);
 
       const badge=
         budgetAmt>0
@@ -2641,6 +2671,34 @@ function toggleBudgetCompleted(sec,index,sub,checked){
   if(row)row.classList.toggle('completed',Boolean(checked));
 }
 
+function budgetSavingsAccountOptions(selected){
+  const budgetName=activeMemberName('budget');
+  const savingsMember=memberMeta.savings.members.find(m=>m.name===budgetName);
+  if(!savingsMember)return '<option value="">적금관리에서 같은 이름의 멤버를 추가하세요</option>';
+  let data={accounts:[]};
+  try{data=JSON.parse(localStorage.getItem('savings_'+savingsMember.id)||'{}');}catch(e){}
+  // 만약 계좌가 현재 메모리에서 수정되었다면 최신 내용 사용
+  if(accounts['savings_'+savingsMember.id])data.accounts=accounts['savings_'+savingsMember.id];
+  return '<option value="">연결 안 함</option>'+(data.accounts||[]).map(a=>
+    `<option value="${a.id}" ${String(selected??'')===String(a.id)?'selected':''}>${escapeBudgetHtml(a.bank)} · ${escapeBudgetHtml(a.name)}</option>`
+  ).join('');
+}
+function escapeBudgetHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function setSavingDepositDate(index,value){
+  const row=getMonthData(budgetYear,budgetMonth).saving[index];
+  if(!row)return;
+  if(value && (!/^\d{4}-\d{2}-\d{2}$/.test(value)||localDateKey(parseLocalDateValue(value))!==value)){alert('올바른 납입일을 입력하세요.');return;}
+  row.depositDate=value||'';
+  bSave();
+  renderBudget();
+}
+function setSavingLinkedAccount(index,value){
+  const row=getMonthData(budgetYear,budgetMonth).saving[index];
+  if(!row)return;
+  row.linkedAccountId=value===''?null:Number(value);
+  bSave();
+  renderBudget();
+}
 function makeRow(row,i,sec,sub){
 
   const disp=
@@ -2677,7 +2735,7 @@ function makeRow(row,i,sec,sub){
 
   return `
     <div
-      class="budget-row${row.completed?' completed':''}"
+      class="budget-row${row.completed?' completed':''}${sec==='saving'?' saving-row':''}"
       data-section="${sec}"
       data-index="${i}"
       data-subcat="${sub}"
@@ -2719,7 +2777,11 @@ function makeRow(row,i,sec,sub){
           '${sub}'
         )"
       >×</button>
-
+      ${sec==='saving'?`<div class="saving-row-controls">
+        <label>납입일 <input type="date" aria-label="${escapeBudgetHtml(row.name)} 납입일" value="${escapeBudgetHtml(row.depositDate||'')}" onchange="setSavingDepositDate(${i},this.value)"></label>
+        <label>적금 계좌 <select aria-label="${escapeBudgetHtml(row.name)} 연결 계좌" onchange="setSavingLinkedAccount(${i},this.value)">${budgetSavingsAccountOptions(row.linkedAccountId)}</select></label>
+        <span class="saving-row-hint">납입일이 지나면 연결된 계좌에 자동 합산 · 체크박스는 표시용</span>
+      </div>`:''}
     </div>`;
 }
 
@@ -3197,7 +3259,9 @@ function saveNewRow(){
   }else if(sec==='saving'){
     d.saving.push({
       name,
-      amount
+      amount,
+      depositDate:'',
+      linkedAccountId:null
     });
   }
 
