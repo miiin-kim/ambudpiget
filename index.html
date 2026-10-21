@@ -1507,14 +1507,19 @@ function getDatedBudgetDeposits(acc){
   // 저장 직전 변경사항도 포함합니다.
   if(budgetCache['budget_'+budgetMember.id])data=budgetCache['budget_'+budgetMember.id];
   const today=localDateKey(new Date());
+  let legacyLinks={};
+  try{legacyLinks=JSON.parse(localStorage.getItem('links_'+savingsMember.id)||'{}');}catch(e){}
   let total=0;
   Object.values(data).forEach(month=>{
     if(!Array.isArray(month?.saving))return;
     month.saving.forEach(row=>{
       if(!row.depositDate || !/^\d{4}-\d{2}-\d{2}$/.test(row.depositDate))return;
       if(row.depositDate>today || !parseLocalDateValue(row.depositDate))return;
-      // 명시적으로 연결한 계좌만 합산. 기존 이름기반 자동연결은 적용하지 않음.
-      if(Number(row.linkedAccountId)!==Number(acc.id) || row.linkedAccountId===null || row.linkedAccountId===undefined || row.linkedAccountId==='')return;
+      // 새 연결을 우선하며, 연결되지 않은 기존 항목에 대해서만 과거 연결 기록을 인정합니다.
+      const hasNewLink=row.linkedAccountId!==null && row.linkedAccountId!==undefined && row.linkedAccountId!=='';
+      const hasLegacyAuto=row.autoSavingsAccountId!==null && row.autoSavingsAccountId!==undefined && row.autoSavingsAccountId!=='';
+      const linkedId=hasNewLink?row.linkedAccountId:(hasLegacyAuto?row.autoSavingsAccountId:legacyLinks[row.name]);
+      if(linkedId===null || linkedId===undefined || linkedId==='' || Number(linkedId)!==Number(acc.id))return;
       total+=Math.max(0,Number(row.amount)||0);
     });
   });
@@ -2671,7 +2676,7 @@ function toggleBudgetCompleted(sec,index,sub,checked){
   if(row)row.classList.toggle('completed',Boolean(checked));
 }
 
-function budgetSavingsAccountOptions(selected){
+function budgetSavingsAccountOptions(selected,rowName,legacyAutoId){
   const budgetName=activeMemberName('budget');
   const savingsMember=memberMeta.savings.members.find(m=>m.name===budgetName);
   if(!savingsMember)return '<option value="">적금관리에서 같은 이름의 멤버를 추가하세요</option>';
@@ -2679,8 +2684,11 @@ function budgetSavingsAccountOptions(selected){
   try{data=JSON.parse(localStorage.getItem('savings_'+savingsMember.id)||'{}');}catch(e){}
   // 만약 계좌가 현재 메모리에서 수정되었다면 최신 내용 사용
   if(accounts['savings_'+savingsMember.id])data.accounts=accounts['savings_'+savingsMember.id];
+  let legacyLinks={};
+  try{legacyLinks=JSON.parse(localStorage.getItem('links_'+savingsMember.id)||'{}');}catch(e){}
+  const resolvedSelected=selected!==null && selected!==undefined && selected!=='' ? selected : (legacyAutoId ?? legacyLinks[rowName]);
   return '<option value="">연결 안 함</option>'+(data.accounts||[]).map(a=>
-    `<option value="${a.id}" ${String(selected??'')===String(a.id)?'selected':''}>${escapeBudgetHtml(a.bank)} · ${escapeBudgetHtml(a.name)}</option>`
+    `<option value="${a.id}" ${String(resolvedSelected??'')===String(a.id)?'selected':''}>${escapeBudgetHtml(a.bank)} · ${escapeBudgetHtml(a.name)}</option>`
   ).join('');
 }
 function escapeBudgetHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -2779,8 +2787,8 @@ function makeRow(row,i,sec,sub){
       >×</button>
       ${sec==='saving'?`<div class="saving-row-controls">
         <label>납입일 <input type="date" aria-label="${escapeBudgetHtml(row.name)} 납입일" value="${escapeBudgetHtml(row.depositDate||'')}" onchange="setSavingDepositDate(${i},this.value)"></label>
-        <label>적금 계좌 <select aria-label="${escapeBudgetHtml(row.name)} 연결 계좌" onchange="setSavingLinkedAccount(${i},this.value)">${budgetSavingsAccountOptions(row.linkedAccountId)}</select></label>
-        <span class="saving-row-hint">납입일이 지나면 연결된 계좌에 자동 합산 · 체크박스는 표시용</span>
+        <label>적금 계좌 <select aria-label="${escapeBudgetHtml(row.name)} 연결 계좌" onchange="setSavingLinkedAccount(${i},this.value)">${budgetSavingsAccountOptions(row.linkedAccountId,row.name,row.autoSavingsAccountId)}</select></label>
+        <span class="saving-row-hint">${!row.depositDate?'⚠ 납입일을 지정해야 적금관리 금액에 반영됩니다.':(!row.linkedAccountId&&!row.autoSavingsAccountId?'연결 계좌를 확인해 주세요.':'납입일이 되면 계좌에 자동 합산됩니다.')} · 체크박스는 표시용</span>
       </div>`:''}
     </div>`;
 }
