@@ -158,13 +158,19 @@ body{font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:var(--bg)
 .budget-check{width:19px;height:19px;flex-shrink:0;accent-color:var(--blue);cursor:pointer;margin:0 5px 0 7px}
 .budget-row.completed .budget-row-label{text-decoration:line-through;text-decoration-thickness:1.5px;color:var(--text3)}
 .budget-row.completed .budget-amount{text-decoration:line-through;text-decoration-thickness:1.5px;color:var(--text3)}
-.saving-row{flex-wrap:wrap}
-.saving-row .budget-row-label{min-width:80px}
-.saving-row-controls{width:100%;display:flex;gap:8px;align-items:center;padding:0 12px 10px 42px;flex-wrap:wrap}
-.saving-row-controls label{font-size:11px;color:var(--text2);display:flex;align-items:center;gap:5px}
-.saving-row-controls input,.saving-row-controls select{font-size:12px;max-width:175px;border:1px solid var(--border2);padding:6px;border-radius:6px;background:var(--surface);color:var(--text);min-height:32px}
-.saving-row-controls select{max-width:195px}
-.saving-row-hint{font-size:10px;color:var(--text3);width:100%}
+/* 저축 납입일은 항목명 바로 옆에 작게 표시합니다. */
+.saving-row .budget-row-label{display:flex;align-items:center;gap:5px;min-width:0;white-space:normal;overflow:visible;padding-right:0}
+.saving-row .saving-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.saving-date{font-family:inherit;font-size:10px;max-width:105px;width:105px;min-width:0;padding:4px 2px;border:1px solid var(--border2);border-radius:6px;color:var(--text2);background:var(--surface);flex-shrink:0}
+.saving-row .budget-amount{width:89px;padding-left:0;padding-right:2px;font-size:13px}
+.saving-row .drag-handle{padding-left:8px;padding-right:3px}
+.saving-row .budget-check{margin-left:3px;margin-right:3px}
+.saving-row .del-row-btn{padding-right:7px;padding-left:3px}
+.budget-row.completed .saving-name{text-decoration:line-through}
+@media(max-width:390px){
+  .saving-date{width:92px;max-width:92px;font-size:9px}
+  .saving-row .budget-amount{width:78px;font-size:12px}
+}
 .budget-row.dragging{opacity:.4}
 .budget-row.drag-over{background:var(--blue-bg);border-top:2px solid var(--blue)}
 .drag-handle{padding:14px 6px 14px 12px;color:var(--text3);font-size:14px;cursor:grab;flex-shrink:0;line-height:1;touch-action:none;user-select:none}
@@ -2741,55 +2747,36 @@ function makeRow(row,i,sec,sub){
     }
   }
 
+  const inlineLabel=sec==='saving'
+    ? `<span class="saving-name">${escapeBudgetHtml(rowLabel)}</span><input class="saving-date" type="date" aria-label="${escapeBudgetHtml(row.name)} 납입일" title="납입일" value="${escapeBudgetHtml(row.depositDate||'')}" onchange="setSavingDepositDate(${i},this.value)" onclick="event.stopPropagation()" />`
+    : escapeBudgetHtml(rowLabel);
+
   return `
     <div
-      class="budget-row${row.completed?' completed':''}${sec==='saving'?' saving-row':''}"
+      class="budget-row${row.completed&&sec!=='income'?' completed':''}${sec==='saving'?' saving-row':''}"
       data-section="${sec}"
       data-index="${i}"
       data-subcat="${sub}"
     >
-
-      <span
-        class="drag-handle"
-        data-drag="true"
-      >☰</span>
-
-      <input type="checkbox" class="budget-check" aria-label="${row.name} 납부 완료"
+      <span class="drag-handle" data-drag="true">☰</span>
+      ${sec==='income'?'':`<input type="checkbox" class="budget-check" aria-label="${escapeBudgetHtml(row.name)} 납부 완료"
         ${row.completed?'checked':''}
-        onchange="toggleBudgetCompleted('${sec}',${i},'${sub}',this.checked)" />
-      <div class="budget-row-label">
-        ${rowLabel}
-      </div>
-
+        onchange="toggleBudgetCompleted('${sec}',${i},'${sub}',this.checked)" />`}
+      <div class="budget-row-label">${inlineLabel}</div>
       <input
         class="budget-amount${row.amount?'':' empty'}"
         type="text"
         inputmode="numeric"
         value="${disp}"
         placeholder="0"
-
         data-section="${sec}"
         data-index="${i}"
         data-subcat="${sub}"
-
         onfocus="onAmountFocus(this)"
         onblur="onAmountBlur(this)"
         oninput="onAmountInput(this)"
       />
-
-      <button
-        class="del-row-btn"
-        onclick="deleteRow(
-          '${sec}',
-          ${i},
-          '${sub}'
-        )"
-      >×</button>
-      ${sec==='saving'?`<div class="saving-row-controls">
-        <label>납입일 <input type="date" aria-label="${escapeBudgetHtml(row.name)} 납입일" value="${escapeBudgetHtml(row.depositDate||'')}" onchange="setSavingDepositDate(${i},this.value)"></label>
-        <label>적금 계좌 <select aria-label="${escapeBudgetHtml(row.name)} 연결 계좌" onchange="setSavingLinkedAccount(${i},this.value)">${budgetSavingsAccountOptions(row.linkedAccountId,row.name,row.autoSavingsAccountId)}</select></label>
-        <span class="saving-row-hint">${!row.depositDate?'⚠ 납입일을 지정해야 적금관리 금액에 반영됩니다.':(!row.linkedAccountId&&!row.autoSavingsAccountId?'연결 계좌를 확인해 주세요.':'납입일이 되면 계좌에 자동 합산됩니다.')} · 체크박스는 표시용</span>
-      </div>`:''}
+      <button class="del-row-btn" onclick="deleteRow('${sec}',${i},'${sub}')">×</button>
     </div>`;
 }
 
