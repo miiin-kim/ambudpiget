@@ -154,6 +154,10 @@ body{font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:var(--bg)
 .budget-rows-grid{display:flex;flex-direction:column}
 .budget-row{background:var(--surface);display:flex;align-items:center;border-bottom:1px solid var(--border);position:relative}
 .budget-row:last-of-type{border-bottom:none}
+/* 납부 확인 체크는 표시만 변경하며 합계와 금액에는 영향을 주지 않습니다. */
+.budget-check{width:19px;height:19px;flex-shrink:0;accent-color:var(--blue);cursor:pointer;margin:0 5px 0 7px}
+.budget-row.completed .budget-row-label{text-decoration:line-through;text-decoration-thickness:1.5px;color:var(--text3)}
+.budget-row.completed .budget-amount{text-decoration:line-through;text-decoration-thickness:1.5px;color:var(--text3)}
 .budget-row.dragging{opacity:.4}
 .budget-row.drag-over{background:var(--blue-bg);border-top:2px solid var(--blue)}
 .drag-handle{padding:14px 6px 14px 12px;color:var(--text3);font-size:14px;cursor:grab;flex-shrink:0;line-height:1;touch-action:none;user-select:none}
@@ -304,7 +308,7 @@ body{font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:var(--bg)
       <div class="field"><label>상품명</label><input id="f-name" placeholder="KB Star 적금" autocomplete="off"/></div>
     </div>
     <div class="field-row">
-      <div class="field"><label>월 납입액 (원) <span style="font-size:11px;color:var(--text3);font-weight:400">선택</span></label><input id="f-monthly" type="number" inputmode="numeric" placeholder="자유납입이면 비워두세요" oninput="toggleAutodayField()"/></div>
+      <div class="field"><label>월 납입액 (원) <span style="font-size:11px;color:var(--text3);font-weight:400">선택</span></label><input id="f-monthly" type="number" inputmode="numeric" placeholder="자유납입이면 비워두세요" /></div>
       <div class="field"><label>연 이율 (%) <span style="font-size:11px;color:var(--text3);font-weight:400">선택</span></label><input id="f-rate" type="number" inputmode="decimal" step="0.01" placeholder="3.5 (없으면 비워두세요)"/></div>
     </div>
     <div class="field">
@@ -326,11 +330,11 @@ body{font-family:'Malgun Gothic','맑은 고딕',sans-serif;background:var(--bg)
       <div class="field"><label>가입일</label><input id="f-start" type="text" inputmode="numeric" placeholder="2024-01-25" maxlength="10" oninput="autoDate(this)"/></div>
       <div class="field"><label>만기일 <span style="font-size:11px;color:var(--text3);font-weight:400">선택 (없으면 비워두세요)</span></label><input id="f-end" type="text" inputmode="numeric" placeholder="2025-01-25" maxlength="10" oninput="autoDate(this)"/></div>
     </div>
-    <div class="field" id="f-autoday-wrap"><label>자동이체일 (매월 며칠)</label><input id="f-autoday" type="number" inputmode="numeric" min="1" max="31" placeholder="25"/></div>
+    
     <div class="field" id="f-initbalance-wrap">
       <label>현재 납입액 (원, 선택)</label>
       <input id="f-initbalance" type="number" inputmode="numeric" placeholder="이미 모은 금액이 있으면 입력"/>
-      <div style="font-size:11px;color:var(--text3);margin-top:4px">지금까지 모은 금액 입력 → 이후 자동이체분이 자동으로 더해져요.</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:4px">현재까지 납입한 금액을 입력하세요. 이후 납입은 + 추가납입으로 직접 기록합니다.</div>
     </div>
     <div class="modal-actions">
       <button onclick="closeAddModal()">취소</button>
@@ -1482,185 +1486,11 @@ function monthsBetween(s,e){
   );
 }
 
-function calcPaidCount(acc){
-  if(!acc.monthly||!acc.autoday){
-    return 0;
-  }
-
-  const now=new Date();
-
-  const today=new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate()
-  );
-
-  const base=getAccountBaseDate(acc);
-
-  if(!base||base>today){
-    return 0;
-  }
-
-  let y=base.getFullYear();
-  let m=base.getMonth();
-  let cnt=0;
-
-  while(true){
-    const lastDay=new Date(
-      y,
-      m+1,
-      0
-    ).getDate();
-
-    const actualDay=Math.min(
-      Number(acc.autoday),
-      lastDay
-    );
-
-    const payDate=new Date(
-      y,
-      m,
-      actualDay
-    );
-
-    if(payDate<base){
-      m++;
-
-      if(m>11){
-        m=0;
-        y++;
-      }
-
-      continue;
-    }
-
-    if(payDate>today){
-      break;
-    }
-
-    const endDate=parseLocalDateValue(acc.end);
-
-    if(endDate&&payDate>endDate){
-      break;
-    }
-
-    cnt++;
-
-    m++;
-
-    if(m>11){
-      m=0;
-      y++;
-    }
-  }
-
-  return cnt;
-}
+function calcPaidCount(acc){ return 0; }
 
 function calcPaid(acc){
-  const monthly=
-    Number(acc.monthly)||0;
-
-  let paid=
-    (Number(acc.initBalance)||0)
-    +
-    monthly*calcPaidCount(acc)
-    +
-    (Number(acc.extra)||0);
-
-  const budgetInfo=
-    getBudgetInfoForAccount(acc.id);
-
-  if(!budgetInfo.found){
-    return paid;
-  }
-
-  if(monthly<=0){
-    return paid+budgetInfo.amount;
-  }
-
-  const now=
-    new Date();
-
-  const autoday=
-    Number(acc.autoday)||0;
-
-  if(!autoday){
-    return paid+budgetInfo.amount;
-  }
-
-  const lastDay=
-    new Date(
-      now.getFullYear(),
-      now.getMonth()+1,
-      0
-    ).getDate();
-
-  const dueDate=
-    new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      Math.min(
-        autoday,
-        lastDay
-      )
-    );
-
-  const today=
-    new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate()
-    );
-
-  // 아직 자동이체일 전
-  if(dueDate>today){
-    return paid;
-  }
-
-  const base=
-    getAccountBaseDate(acc);
-
-  /*
-    앱에 계좌를 등록하기 전에 이미 발생한 자동이체는
-    사용자가 입력한 현재 납입액(initBalance)에
-    이미 포함되어 있다고 봄.
-
-    따라서 가계부 금액을 또 더하지 않는다.
-  */
-  if(
-    base&&
-    dueDate<base
-  ){
-    return paid;
-  }
-
-  const endDate=
-    parseLocalDateValue(acc.end);
-
-  if(
-    endDate&&
-    dueDate>endDate
-  ){
-    return paid;
-  }
-
-  /*
-    calcPaidCount에서 이번 달 기본 월납입액이
-    이미 1회 포함되어 있으므로 빼고,
-    가계부의 실제 납입액으로 교체한다.
-
-    예:
-    기본 월납입액 500,000
-    실제 가계부 금액 470,000
-
-    -500,000 +470,000
-  */
-  paid-=monthly;
-
-  paid+=budgetInfo.amount;
-
-  return paid;
+  // 실제 수동 기록된 납입액만 합산합니다.
+  return (Number(acc.initBalance)||0)+(Number(acc.extra)||0);
 }
 
 function calcMaturity(acc){
@@ -1715,76 +1545,7 @@ function calcMaturity(acc){
   );
 }
 
-function nextAutoDate(acc){
-  const now=new Date();
-
-  const today=new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate()
-  );
-
-  const autoday=
-    Number(acc.autoday)||0;
-
-  if(!autoday){
-    return null;
-  }
-
-  const base=
-    getAccountBaseDate(acc);
-
-  const endDate=
-    parseLocalDateValue(acc.end);
-
-  let y=today.getFullYear();
-  let m=today.getMonth();
-
-  while(true){
-    const lastDay=new Date(
-      y,
-      m+1,
-      0
-    ).getDate();
-
-    const candidate=new Date(
-      y,
-      m,
-      Math.min(
-        autoday,
-        lastDay
-      )
-    );
-
-    if(
-      candidate>=today&&
-      (!base||candidate>=base)
-    ){
-      if(
-        endDate&&
-        candidate>endDate
-      ){
-        return null;
-      }
-
-      return candidate;
-    }
-
-    m++;
-
-    if(m>11){
-      m=0;
-      y++;
-    }
-
-    if(
-      endDate&&
-      new Date(y,m,1)>endDate
-    ){
-      return null;
-    }
-  }
-}
+function nextAutoDate(acc){ return null; }
 
 function updateSummary(){
   const accs=getAccounts();
@@ -1936,14 +1697,7 @@ function renderSavings(){
           ? `<span class="rate-badge" style="background:${c.bg};color:${c.text}">${pct(acc.rate)}</span>`
           : '';
 
-      const autoInfo=
-        acc.autoday
-          ? (
-              nextDate
-                ? `다음 이체 ${nextStr} · `
-                : '이체 예정 없음 · '
-            )
-          : '자유납입 · ';
+      const autoInfo='수동 납입 · ';
 
       const progressMeta=
         acc.end
@@ -2030,11 +1784,7 @@ function renderSavings(){
                 <div class="info-val">${endFmt}</div>
               </div>
 
-              ${
-                acc.autoday
-                  ? `<div class="info-cell"><div class="info-lbl">자동이체일</div><div class="info-val">매월 ${acc.autoday}일</div></div>`
-                  : ''
-              }
+
 
               <div class="info-cell">
                 <div class="info-lbl">추가 납입</div>
@@ -2293,15 +2043,7 @@ function updateInterestLabel(){
   });
 }
 
-function toggleAutodayField(){
-  const hasMonthly=
-    !!document.getElementById('f-monthly').value.trim();
-
-  document.getElementById('f-autoday-wrap').style.display=
-    hasMonthly
-      ? ''
-      : 'none';
-}
+function toggleAutodayField(){}
 
 function openAddModal(){
   editingId=null;
@@ -2316,7 +2058,6 @@ function openAddModal(){
     'f-rate',
     'f-start',
     'f-end',
-    'f-autoday',
     'f-initbalance'
   ].forEach(
     id=>document.getElementById(id).value=''
@@ -2327,7 +2068,6 @@ function openAddModal(){
   updateInterestLabel();
 
   document.getElementById('f-initbalance-wrap').style.display='';
-  document.getElementById('f-autoday-wrap').style.display='none';
   document.getElementById('add-modal').classList.add('open');
 }
 
@@ -2347,12 +2087,7 @@ function openEditModal(id){
   document.getElementById('f-rate').value=a.rate||'';
   document.getElementById('f-start').value=a.start;
   document.getElementById('f-end').value=a.end||'';
-  document.getElementById('f-autoday').value=a.autoday||'';
 
-  document.getElementById('f-autoday-wrap').style.display=
-    a.monthly
-      ? ''
-      : 'none';
 
   document.getElementById(
     a.interestType==='compound'
@@ -2397,14 +2132,7 @@ function saveAccount(){
       ? parseDate(endVal)
       : null;
 
-  const autoday=
-    monthly
-      ? (
-          parseInt(
-            document.getElementById('f-autoday').value
-          )||25
-        )
-      : null;
+  const autoday=null;
 
   const initBalance=
     parseFloat(
@@ -2652,358 +2380,7 @@ function sumArr(arr){
   );
 }
 
-function syncAutoSavingsToBudget(memberName){
-  const now=new Date();
-
-  const today=
-    new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate()
-    );
-
-  const savingsMember=
-    memberMeta.savings.members.find(
-      m=>m.name===memberName
-    );
-
-  const budgetMember=
-    memberMeta.budget.members.find(
-      m=>m.name===memberName
-    );
-
-  if(
-    !savingsMember ||
-    !budgetMember
-  ){
-    return;
-  }
-
-  const savingsKey=
-    'savings_'+savingsMember.id;
-
-  let savingsData={
-    accounts:[]
-  };
-
-  try{
-    savingsData=
-      JSON.parse(
-        localStorage.getItem(savingsKey)||'{}'
-      );
-  }catch(e){}
-
-  const accs=
-    savingsData.accounts||[];
-
-  const budgetKey=
-    'budget_'+budgetMember.id;
-
-  let budgetData={};
-
-  try{
-    budgetData=
-      JSON.parse(
-        localStorage.getItem(budgetKey)||'{}'
-      );
-  }catch(e){}
-
-  const linksKey=
-    'links_'+savingsMember.id;
-
-  let links={};
-
-  try{
-    links=
-      JSON.parse(
-        localStorage.getItem(linksKey)||'{}'
-      );
-  }catch(e){}
-
-  let changed=false;
-
-  /*
-    2026년 9월 월급부터
-    현재 월급주기까지 누락된 자동저축을 확인
-  */
-  const currentCycleKey=
-    getBudgetCycleKey(today);
-
-  let cycleKey=
-    AUTO_BUDGET_START_CYCLE;
-
-  while(cycleKey<=currentCycleKey){
-
-    accs.forEach(acc=>{
-
-      const monthly=
-        Number(acc.monthly)||0;
-
-      const autoday=
-        Number(acc.autoday)||0;
-
-      if(
-        monthly<=0 ||
-        autoday<=0
-      ){
-        return;
-      }
-
-      /*
-        이 월급주기에 해당하는
-        실제 자동이체 날짜 계산
-      */
-      const dueDate=
-        getAutoDueDateForCycle(
-          acc,
-          cycleKey
-        );
-
-      if(!dueDate){
-        return;
-      }
-
-      /*
-        아직 날짜가 안 됐으면
-        자동 반영하지 않음
-      */
-      if(dueDate>today){
-        return;
-      }
-
-      /*
-        실제 적금 시작일 이전이면 제외
-      */
-      const startDate=
-        getAccountStartDate(acc);
-
-      if(
-        startDate &&
-        dueDate<startDate
-      ){
-        return;
-      }
-
-      /*
-        만기 이후 제외
-      */
-      const endDate=
-        parseLocalDateValue(acc.end);
-
-      if(
-        endDate &&
-        dueDate>endDate
-      ){
-        return;
-      }
-
-      const dueDateKey=
-        localDateKey(dueDate);
-
-      /*
-        해당 월급 가계부 생성
-      */
-      if(!budgetData[cycleKey]){
-        budgetData[cycleKey]={
-          income:[],
-          expense:{
-            fixed:[],
-            flex:[]
-          },
-          saving:[]
-        };
-      }
-
-      const d=
-        budgetData[cycleKey];
-
-      if(!Array.isArray(d.income)){
-        d.income=[];
-      }
-
-      if(
-        !d.expense ||
-        Array.isArray(d.expense)
-      ){
-        d.expense={
-          fixed:[],
-          flex:[]
-        };
-      }
-
-      if(!Array.isArray(d.expense.fixed)){
-        d.expense.fixed=[];
-      }
-
-      if(!Array.isArray(d.expense.flex)){
-        d.expense.flex=[];
-      }
-
-      if(!Array.isArray(d.saving)){
-        d.saving=[];
-      }
-
-      /*
-        같은 적금의 자동저축 행 찾기
-      */
-      let row=
-        d.saving.find(
-          r=>
-            Number(r.autoSavingsAccountId)
-            ===Number(acc.id)
-        );
-
-      /*
-        이미 자동 생성된 행이 있는 경우
-      */
-      if(row){
-
-        if(
-          row.autoSavingsDate!==dueDateKey
-        ){
-          row.autoSavingsDate=
-            dueDateKey;
-
-          changed=true;
-        }
-
-        /*
-          사용자가 직접 수정한 금액은 유지
-        */
-        if(row.manualOverride===true){
-          return;
-        }
-
-        const currentAmount=
-          Number(row.amount)||0;
-
-        const oldDefault=
-          Number(
-            row.autoDefaultAmount
-          )||0;
-
-        if(
-          row.autoDefaultAmount===undefined ||
-          currentAmount===oldDefault ||
-          currentAmount===monthly ||
-          currentAmount===0
-        ){
-          row.amount=
-            monthly;
-
-          row.autoDefaultAmount=
-            monthly;
-
-          row.manualOverride=
-            false;
-
-          changed=true;
-        }
-        else{
-          row.manualOverride=
-            true;
-
-          changed=true;
-        }
-
-        return;
-      }
-
-      /*
-        수동으로 연결한 저축 항목 찾기
-      */
-      row=
-        d.saving.find(
-          r=>
-            Number(links[r.name])
-            ===Number(acc.id)
-        );
-
-      /*
-        상품명이 같은 기존 행도 확인
-      */
-      if(!row){
-        row=
-          d.saving.find(
-            r=>r.name===acc.name
-          );
-      }
-
-      if(row){
-
-        const existingAmount=
-          Number(row.amount)||0;
-
-        row.autoSavingsAccountId=
-          acc.id;
-
-        row.autoSavingsDate=
-          dueDateKey;
-
-        row.autoDefaultAmount=
-          monthly;
-
-        if(existingAmount<=0){
-          row.amount=
-            monthly;
-
-          row.manualOverride=
-            false;
-        }
-        else if(
-          existingAmount===monthly
-        ){
-          row.manualOverride=
-            false;
-        }
-        else{
-          /*
-            이미 실제 금액을 직접 적어둔 경우
-          */
-          row.manualOverride=
-            true;
-        }
-
-        changed=true;
-        return;
-      }
-
-      /*
-        아무것도 없으면 신규 생성
-      */
-      d.saving.push({
-        name:acc.name,
-        amount:monthly,
-
-        autoSavingsAccountId:
-          acc.id,
-
-        autoDefaultAmount:
-          monthly,
-
-        autoSavingsDate:
-          dueDateKey,
-
-        manualOverride:false
-      });
-
-      changed=true;
-    });
-
-    cycleKey=
-      nextBudgetCycleKey(cycleKey);
-  }
-
-  if(changed){
-    localStorage.setItem(
-      budgetKey,
-      JSON.stringify(budgetData)
-    );
-
-    budgetCache[budgetKey]=
-      budgetData;
-  }
-}
+function syncAutoSavingsToBudget(memberName){ /* 자동 저축 생성 기능 비활성화 */ }
 
 function renderBudget(){
   syncAutoSavingsToBudget(
@@ -3252,6 +2629,18 @@ function onAmountInput(el){
   bSave();
 }
 
+function toggleBudgetCompleted(sec,index,sub,checked){
+  const d=getMonthData(budgetYear,budgetMonth);
+  const arr=sec==='expense' ? d.expense[sub] : d[sec];
+  if(!arr || !arr[index])return;
+  arr[index].completed=Boolean(checked);
+  bSave();
+  const container=sec==='expense' ? 'grid-expense'+sub : 'grid-'+sec+sub;
+  const grid=document.getElementById(container);
+  const row=grid && [...grid.querySelectorAll('.budget-row')][index];
+  if(row)row.classList.toggle('completed',Boolean(checked));
+}
+
 function makeRow(row,i,sec,sub){
 
   const disp=
@@ -3288,7 +2677,7 @@ function makeRow(row,i,sec,sub){
 
   return `
     <div
-      class="budget-row"
+      class="budget-row${row.completed?' completed':''}"
       data-section="${sec}"
       data-index="${i}"
       data-subcat="${sub}"
@@ -3299,6 +2688,9 @@ function makeRow(row,i,sec,sub){
         data-drag="true"
       >☰</span>
 
+      <input type="checkbox" class="budget-check" aria-label="${row.name} 납부 완료"
+        ${row.completed?'checked':''}
+        onchange="toggleBudgetCompleted('${sec}',${i},'${sub}',this.checked)" />
       <div class="budget-row-label">
         ${rowLabel}
       </div>
@@ -3927,6 +3319,22 @@ function closeImportModal(){
   document.getElementById('import-modal').classList.remove('open');
 }
 
+function cleanImportedBudget(data){
+  Object.values(data).forEach(month=>{
+    if(!Array.isArray(month?.saving))return;
+    month.saving=month.saving.filter(row=>{
+      if(row.autoSavingsAccountId===undefined || row.autoSavingsAccountId===null)return true;
+      if(row.manualOverride!==true)return false;
+      delete row.autoSavingsAccountId;
+      delete row.autoSavingsDate;
+      delete row.autoDefaultAmount;
+      delete row.manualOverride;
+      return true;
+    });
+  });
+  return data;
+}
+
 function doImport(){
   const raw=
     document.getElementById('import-data').value.trim();
@@ -3979,7 +3387,7 @@ function doImport(){
     localStorage.setItem(
       'savings_'+finalId,
       JSON.stringify({
-        accounts:parsed.accounts||[],
+        accounts:(parsed.accounts||[]).map(a=>({...a,autoday:null})),
         nextId:parsed.nextId||1
       })
     );
@@ -4006,9 +3414,7 @@ function doImport(){
 
     localStorage.setItem(
       'budget_'+finalId,
-      JSON.stringify(
-        parsed.data||{}
-      )
+      JSON.stringify(cleanImportedBudget(parsed.data||{}))
     );
 
     delete budgetCache[
@@ -4057,6 +3463,45 @@ function doImport(){
     );
 });
 
+// 최초 1회: 과거 자동입력 데이터 정리. 수동 수정분은 보존합니다.
+function migrateManualEntries(){
+  const versionKey='manual_savings_migration_v1';
+  if(localStorage.getItem(versionKey)==='done')return;
+  const keys=[];
+  for(let i=0;i<localStorage.length;i++)keys.push(localStorage.key(i));
+  keys.forEach(key=>{
+    if(key.startsWith('savings_')){
+      try{
+        const data=JSON.parse(localStorage.getItem(key));
+        if(!Array.isArray(data.accounts))return;
+        data.accounts.forEach(acc=>{acc.autoday=null;});
+        localStorage.setItem(key,JSON.stringify(data));
+      }catch(e){}
+    }
+    if(key.startsWith('budget_')){
+      try{
+        const data=JSON.parse(localStorage.getItem(key));
+        Object.values(data).forEach(month=>{
+          if(!Array.isArray(month?.saving))return;
+          month.saving=month.saving.filter(row=>{
+            if(row.autoSavingsAccountId===undefined || row.autoSavingsAccountId===null)return true;
+            if(row.manualOverride!==true)return false;
+            delete row.autoSavingsAccountId;
+            delete row.autoSavingsDate;
+            delete row.autoDefaultAmount;
+            delete row.manualOverride;
+            return true;
+          });
+        });
+        localStorage.setItem(key,JSON.stringify(data));
+      }catch(e){}
+    }
+  });
+  // 캐시가 존재하는 경우 다음 렌더링에 최신 저장 내용을 사용합니다.
+  accounts={};budgetCache={};
+  localStorage.setItem(versionKey,'done');
+}
+
 const now=new Date();
 
 const currentCycle=
@@ -4069,6 +3514,7 @@ budgetMonth=
   currentCycle.month;
 
 loadMemberMeta();
+migrateManualEntries();
 
 applyMemberColor('savings');
 
