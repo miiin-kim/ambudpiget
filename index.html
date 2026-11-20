@@ -965,7 +965,6 @@ function renderSavings(){
       <div class="bank-name">${esc(acc.name)}</div>
       <div class="bank-product">
        ${esc(acc.bank)}
-       ${linked>0?` · 📒 ${fmt(linked)}`:''}
        ${acc.interestType==='compound'?' · 복리':''}
       </div>
      </div>
