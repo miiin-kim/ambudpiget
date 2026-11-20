@@ -991,7 +991,6 @@ function renderSavings(){
       <div><div class="info-lbl">${acc.end?'만기 예상액':'현재 잔액'}</div><div class="info-val">${fmt(calcMaturity(acc))}</div></div>
       <div><div class="info-lbl">만기일</div><div class="info-val">${esc(acc.end||'만기 없음')}</div></div>
       <div><div class="info-lbl">추가 납입</div><div class="info-val">${fmt(acc.extra)}</div></div>
-      <div><div class="info-lbl">가계부 완료 반영</div><div class="info-val">${fmt(linked)}</div></div>
      </div>
      <div class="card-actions">
       <button class="btn-sm" data-extra>+ 추가납입</button>
